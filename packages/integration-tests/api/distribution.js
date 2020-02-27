@@ -117,14 +117,13 @@ async function getDistributionApiRedirect(filepath, headers) {
  *
  * @param {string} filepath
  *   Distribution API file path to request
- * @param {string} accessToken
- *   Access token from OAuth provider
+ * @param {Object} headers - Headers to use for Distribution API request
  *
  * @returns {ReadableStream}
  *   Stream to the file protected by the distribution
  */
-async function getDistributionApiFileStream(filepath, accessToken) {
-  const s3SignedUrl = await getDistributionApiRedirect(filepath, accessToken);
+async function getDistributionApiFileStream(filepath, headers) {
+  const s3SignedUrl = await getDistributionApiRedirect(filepath, headers);
   return got.stream(s3SignedUrl);
 }
 
