@@ -13,7 +13,6 @@ const intersection = require('lodash.intersection');
 const {
   Execution,
   Granule,
-  Collection,
   Pdr,
   Provider
 } = require('@cumulus/api/models');
@@ -39,6 +38,7 @@ const {
   waitForCompletedExecution
 } = require('@cumulus/integration-tests');
 const apiTestUtils = require('@cumulus/integration-tests/api/api');
+const { deleteCollection } = require('@cumulus/integration-tests/api/collections');
 const executionsApiTestUtils = require('@cumulus/integration-tests/api/executions');
 const granulesApiTestUtils = require('@cumulus/integration-tests/api/granules');
 const {
@@ -99,7 +99,6 @@ describe('The S3 Ingest Granules workflow', () => {
   const collectionDupeHandling = 'error';
 
   let collection;
-  let collectionModel;
   let config;
   let executionModel;
   let expectedPayload;
@@ -132,9 +131,7 @@ describe('The S3 Ingest Granules workflow', () => {
     granuleModel = new Granule();
     process.env.ExecutionsTable = `${config.stackName}-ExecutionsTable`;
     executionModel = new Execution();
-    process.env.CollectionsTable = `${config.stackName}-CollectionsTable`;
     process.env.system_bucket = config.bucket;
-    collectionModel = new Collection();
     process.env.ProvidersTable = `${config.stackName}-ProvidersTable`;
     providerModel = new Provider();
     process.env.PdrsTable = `${config.stackName}-PdrsTable`;
@@ -248,7 +245,7 @@ describe('The S3 Ingest Granules workflow', () => {
     // clean up stack state added by test
     await Promise.all([
       deleteFolder(config.bucket, testDataFolder),
-      collectionModel.delete(collection),
+      deleteCollection(config.stackName, collection.name, collection.version),
       providerModel.delete(provider),
       executionModel.delete({ arn: workflowExecutionArn }),
       granulesApiTestUtils.removePublishedGranule({
