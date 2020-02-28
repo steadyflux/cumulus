@@ -42,9 +42,9 @@ const apiTestUtils = require('@cumulus/integration-tests/api/api');
 const executionsApiTestUtils = require('@cumulus/integration-tests/api/executions');
 const granulesApiTestUtils = require('@cumulus/integration-tests/api/granules');
 const {
-  getDistributionApiRedirect,
-  getDistributionApiFileStream,
   getDistributionFileUrl,
+  getTEADistributionApiRedirect,
+  getTEADistributionApiFileStream,
   getTEARequestHeaders
 } = require('@cumulus/integration-tests/api/distribution');
 const { LambdaStep } = require('@cumulus/integration-tests/sfnStep');
@@ -510,7 +510,7 @@ describe('The S3 Ingest Granules workflow', () => {
 
     it('includes the Earthdata login ID for requests to protected science files', async () => {
       const filepath = `/${files[0].bucket}/${files[0].filepath}`;
-      const s3SignedUrl = await getDistributionApiRedirect(filepath, teaRequestHeaders);
+      const s3SignedUrl = await getTEADistributionApiRedirect(filepath, teaRequestHeaders);
       const earthdataLoginParam = new URL(s3SignedUrl).searchParams.get('A-userid');
       expect(earthdataLoginParam).toEqual(process.env.EARTHDATA_USERNAME);
     });
@@ -535,7 +535,7 @@ describe('The S3 Ingest Granules workflow', () => {
             const file = files.find((f) => f.name.endsWith(extension));
 
             const filepath = `/${file.bucket}/${file.filepath}`;
-            const fileStream = await getDistributionApiFileStream(filepath, teaRequestHeaders);
+            const fileStream = await getTEADistributionApiFileStream(filepath, teaRequestHeaders);
             // Compare checksum of downloaded file with expected checksum.
             const downloadChecksum = await generateChecksumFromStream('cksum', fileStream);
             return downloadChecksum === sourceChecksum;
