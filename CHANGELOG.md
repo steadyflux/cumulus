@@ -168,7 +168,6 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 - **CUMULUS-1755**
   - Updated the Thin Egress App module used in `tf-modules/distribution/main.tf` to build 61. [See the release notes](https://github.com/asfadmin/thin-egress-app/releases/tag/tea-build.61).
-  - Updated `@cumulus/integration-tests/api/distribution.invokeApiDistributionLambda()` to invoke the Thin Egress App Lambda for testing
 
 - **CUMULUS-1757**
   - Update @cumulus/cmr-client CMRSearchConceptQueue to take optional cmrEnvironment parameter
