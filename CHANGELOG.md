@@ -241,6 +241,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - **CUMULUS-1768**
   - Fix an issue in the stats endpoint in `@cumulus/api` to send back stats for the correct type
 
+- **CUMULUS-1775** 
+  - Fix/update api endpoint to use updated google auth endpoints such that it will work with new accounts  
+
 ## [v1.18.0] 2020-02-03
 
 ### BREAKING CHANGES
