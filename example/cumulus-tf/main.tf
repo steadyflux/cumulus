@@ -124,7 +124,6 @@ module "cumulus" {
     "jasmine"
   ]
 
-  distribution_url = var.distribution_url
   thin_egress_jwt_secret_name = var.thin_egress_jwt_secret_name
 
   sts_credentials_lambda_function_arn = data.aws_lambda_function.sts_credentials.arn
@@ -137,6 +136,11 @@ module "cumulus" {
   additional_log_groups_to_elk  = var.additional_log_groups_to_elk
 
   tags = local.tags
+
+  distribution_rest_api_id = module.thin_egress_app.rest_api_id
+  distribution_url = module.thin_egress_app.distribution_url
+  distribution_rest_api_root_resource_id = module.thin_egress_app.root_resource_id
+  distribution_egress_log_group = module.thin_egress_app.egress_log_group
 }
 
 resource "aws_security_group" "no_ingress_all_egress" {

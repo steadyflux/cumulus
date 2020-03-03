@@ -95,8 +95,8 @@ module "archive" {
   # the keys of the queues from config.sqs, thus backgroundProcessing
   background_queue_name = "backgroundProcessing"
 
-  distribution_api_id = module.distribution.rest_api_id
-  distribution_url    = module.distribution.distribution_url
+  distribution_api_id = var.distribution_rest_api_id
+  distribution_url    = var.distribution_url
 
   users = var.archive_api_users
 

@@ -5,7 +5,7 @@ module "ingest" {
 
   buckets = var.buckets
 
-  distribution_url                         = module.distribution.distribution_url
+  distribution_url                         = var.distribution_url
   cumulus_message_adapter_lambda_layer_arn = var.cumulus_message_adapter_lambda_layer_arn
 
   # Buckets config

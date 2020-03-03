@@ -168,12 +168,6 @@ variable "distribution_api_gateway_stage" {
   default     = "DEV"
 }
 
-variable "distribution_url" {
-  description = " URL for the distribution API"
-  type        = string
-  default     = null
-}
-
 variable "ecs_container_stop_timeout" {
   description = "Time duration to wait from when a task is stopped before its containers are forcefully killed if they do not exit normally on their own"
   type        = string
@@ -503,4 +497,21 @@ variable "additional_log_groups_to_elk" {
   description = "Map of Cloudwatch Log Groups. The key is a descriptor and the value is the log group"
   type = map(string)
   default = {}
+}
+
+
+variable "distribution_rest_api_id" {
+  type = string
+}
+
+variable "distribution_url" {
+  type = string
+}
+
+variable "distribution_rest_api_root_resource_id" {
+  type = string
+}
+
+variable "distribution_egress_log_group" {
+  type = string
 }
