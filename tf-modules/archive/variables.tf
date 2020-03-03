@@ -184,7 +184,7 @@ variable "ems_username" {
 
 variable "lambda_subnet_ids" {
   type    = list(string)
-  default = null
+  default = []
 }
 
 variable "launchpad_api" {
@@ -265,6 +265,12 @@ variable "saml_idp_login" {
 variable "saml_launchpad_metadata_url" {
   type    = string
   default = "N/A"
+}
+
+variable "tags" {
+  description = "Tags to be applied to managed resources"
+  type        = map(string)
+  default     = {}
 }
 
 variable "urs_url" {

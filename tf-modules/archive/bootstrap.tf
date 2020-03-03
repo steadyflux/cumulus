@@ -14,10 +14,18 @@ resource "aws_lambda_function" "custom_bootstrap" {
       system_bucket   = var.system_bucket
     }
   }
-  tags = merge(local.default_tags, { Project = var.prefix })
-  vpc_config {
-    subnet_ids         = var.lambda_subnet_ids
-    security_group_ids = var.lambda_subnet_ids == null ? null : [aws_security_group.no_ingress_all_egress[0].id, var.elasticsearch_security_group_id]
+
+  tags = var.tags
+
+  dynamic "vpc_config" {
+    for_each = length(var.lambda_subnet_ids) == 0 ? [] : [1]
+    content {
+      subnet_ids = var.lambda_subnet_ids
+      security_group_ids = [
+        aws_security_group.no_ingress_all_egress[0].id,
+        var.elasticsearch_security_group_id
+      ]
+    }
   }
 }
 
