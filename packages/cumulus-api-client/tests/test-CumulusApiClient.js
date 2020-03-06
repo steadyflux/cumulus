@@ -1,8 +1,10 @@
 'use strict';
 
-const { createKey, decryptBase64String } = require('@cumulus/aws-client/KMS');
+const pRetry = require('p-retry');
 const test = require('ava');
 const rewire = require('rewire');
+
+const { createKey, decryptBase64String } = require('@cumulus/aws-client/KMS');
 const { dynamodb, dynamodbDocClient } = require('@cumulus/aws-client/services');
 
 const { randomId } = require('@cumulus/common/test-utils');
@@ -12,7 +14,7 @@ const CumulusAuthTokenError = require('../CumulusAuthTokenError');
 
 test.before(async (t) => {
   process.env.tableName = randomId('table');
-  dynamodb().createTable({
+  await dynamodb().createTable({
     TableName: process.env.tableName,
     AttributeDefinitions: [
       { AttributeName: 'tokenAlias', AttributeType: 'S' }
@@ -26,6 +28,14 @@ test.before(async (t) => {
     }
   }).promise();
 
+  await pRetry(async () => {
+    const status = await dynamodb().describeTable({ TableName: process.env.tableName }).promise();
+    if (status.Table.TableStatus !== 'ACTIVE') {
+      console.log('Waiting for table creation.....');
+      throw new Error('Table not ready yet');
+    }
+  });
+
   const kmsResponse = await createKey();
   const kmsId = kmsResponse.KeyMetadata.KeyId;
 
@@ -38,18 +48,30 @@ test.before(async (t) => {
 });
 
 test.after.always(
-  () => dynamodb().deleteTable({ TableName: process.env.tableName }).promise()
+  async () => dynamodb().deleteTable({ TableName: process.env.tableName }).promise()
 );
+
+test.serial('getCacheAuthToken initializes cache and sets token if cacheInitialized is false', async (t) => {
+  const token = randomId();
+  const testApiClient = new CumulusApiClientRewire(t.context.config);
+  testApiClient.createNewAuthToken = async () => token;
+  testApiClient._validateTokenExpiry = async () => true;
+  const actual = await testApiClient.getCacheAuthToken();
+  t.is(token, actual);
+  t.is(true, testApiClient.cacheInitialized);
+});
+
 
 test.serial('getCacheAuthToken retrieves expired token from the database and updates the database with a new token', async (t) => {
   const token = 'expiredToken';
-  const updatedToken = 'updatedToken';
+  const updatedToken = randomId();
   const testApiClient = new CumulusApiClientRewire(t.context.config);
+  testApiClient.cacheInitialized = true;
   testApiClient._updateAuthTokenRecord(token);
   testApiClient._validateTokenExpiry = async () => {
     throw new CumulusAuthTokenError('Token expired, obtaining new token');
   };
-  testApiClient.createNewAuthToken = async () => updatedToken;
+  testApiClient._createAndUpdateNewAuthToken = async () => updatedToken;
 
   const actual = await testApiClient.getCacheAuthToken();
   t.is(updatedToken, actual);
@@ -58,6 +80,7 @@ test.serial('getCacheAuthToken retrieves expired token from the database and upd
 test.serial('getCacheAuthToken returns a bearer token from getAuthTokenRecord if token is not expired', async (t) => {
   const token = 'mockToken';
   const testApiClient = new CumulusApiClientRewire(t.context.config);
+  testApiClient.cacheInitialized = true;
   testApiClient._getAuthTokenRecord = async () => token;
   testApiClient._validateTokenExpiry = async () => true;
   const actual = await testApiClient.getCacheAuthToken();
@@ -66,11 +89,12 @@ test.serial('getCacheAuthToken returns a bearer token from getAuthTokenRecord if
 
 test.serial('getCacheAuthToken gets a new token and updates the record if token is expired', async (t) => {
   const mockToken = 'mockToken';
-  const updatedToken = 'updatedToken';
+  const updatedToken = randomId();
   const testApiClient = new CumulusApiClientRewire(t.context.config);
+  testApiClient.cacheInitialized = true;
   testApiClient._getAuthTokenRecord = async () => mockToken;
   testApiClient._getTokenTimeLeft = async () => 0;
-  testApiClient.createNewAuthToken = async () => updatedToken;
+  testApiClient._createAndUpdateNewAuthToken = async () => updatedToken;
 
   testApiClient._updateAuthTokenRecord = async (token) => {
     t.is(updatedToken, token);
@@ -81,12 +105,13 @@ test.serial('getCacheAuthToken gets a new token and updates the record if token 
 });
 
 test.serial('getCacheAuthToken returns updated token from getAuthToken if getAuthTokenRecord throws a CumulusAuthTokenError', async (t) => {
-  const updateToken = 'updatedToken';
+  const updateToken = randomId();
   const testApiClient = new CumulusApiClientRewire(t.context.config);
+  testApiClient.cacheInitialized = true;
   testApiClient._getAuthTokenRecord = async () => {
     throw new CumulusAuthTokenError();
   };
-  testApiClient.createNewAuthToken = async () => updateToken;
+  testApiClient._createAndUpdateNewAuthToken = async () => updateToken;
   testApiClient._updateAuthTokenRecord = async () => true;
   const actual = await testApiClient.getCacheAuthToken();
   t.is(updateToken, actual);
@@ -94,14 +119,17 @@ test.serial('getCacheAuthToken returns updated token from getAuthToken if getAut
 
 test.serial('getCacheAuthToken throws an error if _getAuthTokenRecord throws an Error', async (t) => {
   const testApiClient = new CumulusApiClientRewire(t.context.config);
+  testApiClient.cacheInitialized = true;
   testApiClient._getAuthTokenRecord = async () => {
     throw new Error('Error Message');
   };
   await t.throwsAsync(testApiClient.getCacheAuthToken());
 });
 
+
 test.serial('getCacheAuthToken throws an error if _validateTokenExpiry throws an Error', async (t) => {
   const testApiClient = new CumulusApiClientRewire(t.context.config);
+  testApiClient.cacheInitialized = true;
   testApiClient._getAuthTokenRecord = async () => 'mockToken';
   testApiClient._validateTokenExpiry = async () => {
     throw new Error('Error Message');
@@ -204,6 +232,7 @@ test.serial('get attempts to call the url with a previous stored auth token', as
       }
     });
     const testApiClient = new CumulusApiClientRewire(t.context.config);
+    testApiClient.cacheInitialized = true;
     testApiClient.getCacheAuthToken = async () => authToken;
     t.is('got return value', await testApiClient.get('endpoint'));
   } finally {
@@ -224,6 +253,7 @@ test.serial('get retries/creates a token the expected number of times, then thro
       }
     });
     const testApiClient = new CumulusApiClientRewire(t.context.config);
+    testApiClient.cacheInitialized = true;
     testApiClient.createNewAuthToken = async () => 'mockToken';
     testApiClient.getCacheAuthToken = async () => authToken;
     await t.throwsAsync(testApiClient.get(getUrl, 4));
@@ -231,4 +261,23 @@ test.serial('get retries/creates a token the expected number of times, then thro
   } finally {
     gotRevert();
   }
+});
+
+test.serial('_createAndUpdateNewAuthToken creates a new token and updates the cache', async (t) => {
+  const token = randomId();
+  const testApiClient = new CumulusApiClientRewire(t.context.config);
+  testApiClient._validateTokenExpiry = async () => true;
+  testApiClient.createNewAuthToken = async () => token;
+  await testApiClient._createAndUpdateNewAuthToken();
+  const actual = await testApiClient.getCacheAuthToken();
+  t.is(token, actual);
+});
+
+test.serial('_createAndUpdateNewAuthToken throws a CumulusAuthTokenError on updateError', async (t) => {
+  const testApiClient = new CumulusApiClientRewire(t.context.config);
+  testApiClient._validateTokenExpiry = async () => true;
+  testApiClient.createNewAuthToken = async () => {
+    throw new Error('test error');
+  };
+  await t.throwsAsync(testApiClient._createAndUpdateNewAuthToken(), { name: 'CumulusAuthTokenError' });
 });
