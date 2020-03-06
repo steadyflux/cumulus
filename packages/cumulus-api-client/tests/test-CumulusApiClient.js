@@ -266,10 +266,15 @@ test.serial('get retries/creates a token the expected number of times, then thro
 test.serial('_createAndUpdateNewAuthToken creates a new token and updates the cache', async (t) => {
   const token = randomId();
   const testApiClient = new CumulusApiClientRewire(t.context.config);
+  testApiClient.cacheInitialized = true;
   testApiClient._validateTokenExpiry = async () => true;
   testApiClient.createNewAuthToken = async () => token;
+
   await testApiClient._createAndUpdateNewAuthToken();
+
+  testApiClient.createNewAuthToken = async () => randomId();
   const actual = await testApiClient.getCacheAuthToken();
+
   t.is(token, actual);
 });
 
