@@ -54,7 +54,6 @@
   "devDependencies": {
     "ava": "^2.1.0",
     "lodash.ismatch": "^4.4.0",
-    "p-retry": "4.2.0",
     "rewire": "^4.0.1"
   }
 }

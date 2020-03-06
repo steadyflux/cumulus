@@ -1,11 +1,11 @@
 'use strict';
 
-const pRetry = require('p-retry');
 const test = require('ava');
 const rewire = require('rewire');
 
 const { createKey, decryptBase64String } = require('@cumulus/aws-client/KMS');
-const { dynamodb, dynamodbDocClient } = require('@cumulus/aws-client/services');
+const { dynamodbDocClient } = require('@cumulus/aws-client/services');
+const { createAndWaitForDynamoDbTable, deleteAndWaitForDynamoDbTableNotExists } = require('@cumulus/aws-client/DynamoDb');
 
 const { randomId } = require('@cumulus/common/test-utils');
 
@@ -14,7 +14,7 @@ const CumulusAuthTokenError = require('../CumulusAuthTokenError');
 
 test.before(async (t) => {
   process.env.tableName = randomId('table');
-  await dynamodb().createTable({
+  await createAndWaitForDynamoDbTable({
     TableName: process.env.tableName,
     AttributeDefinitions: [
       { AttributeName: 'tokenAlias', AttributeType: 'S' }
@@ -25,14 +25,6 @@ test.before(async (t) => {
     ProvisionedThroughput: {
       ReadCapacityUnits: 5,
       WriteCapacityUnits: 5
-    }
-  }).promise();
-
-  await pRetry(async () => {
-    const status = await dynamodb().describeTable({ TableName: process.env.tableName }).promise();
-    if (status.Table.TableStatus !== 'ACTIVE') {
-      console.log('Waiting for table creation.....');
-      throw new Error('Table not ready yet');
     }
   });
 
@@ -48,7 +40,7 @@ test.before(async (t) => {
 });
 
 test.after.always(
-  async () => dynamodb().deleteTable({ TableName: process.env.tableName }).promise()
+  async () => deleteAndWaitForDynamoDbTableNotExists({ TableName: process.env.tableName })
 );
 
 test.serial('getCacheAuthToken initializes cache and sets token if cacheInitialized is false', async (t) => {
@@ -58,7 +50,7 @@ test.serial('getCacheAuthToken initializes cache and sets token if cacheInitiali
   testApiClient._validateTokenExpiry = async () => true;
   const actual = await testApiClient.getCacheAuthToken();
   t.is(token, actual);
-  t.is(true, testApiClient.cacheInitialized);
+  t.true(testApiClient.cacheInitialized);
 });
 
 
