@@ -6,10 +6,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### BREAKING CHANGE
+### BREAKING CHANGES
 
 - **CUMULUS-1714**
-  - Changed the format of the message sent to the granule SNS Topic. Message includes the granule record under `record` and the type of event under `event`. Messages with `deleted` events will have the record that was deleted with a `deletedAt` timestamp. Options for `event` are `Create | UpdatSe | Delete`
+  - Changed the format of the message sent to the granule SNS Topic. Message includes the granule record under `record` and the type of event under `event`. Messages with `deleted` events will have the record that was deleted with a `deletedAt` timestamp. Options for `event` are `Create | Update | Delete`
 
 ### Fixed
 
@@ -19,6 +19,19 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 ## [v1.19.0] 2020-02-28
 
 ### BREAKING CHANGES
+
+- **CUMULUS-1736**
+  - The `@cumulus/discover-granules` task now sets the `dataType` of discovered
+    granules based on the `name` of the configured collection, not the
+    `dataType`.
+  - The config schema of the `@cumulus/discover-granules` task now requires that
+    collections contain a `version`.
+  - The `@cumulus/sync-granule` task will set the `dataType` and `version` of a
+    granule based on the configured collection if those fields are not already
+    set on the granule. Previously it was using the `dataType` field of the
+    configured collection, then falling back to the `name` field of the
+    collection. This update will just use the `name` field of the collection to
+    set the `dataType` field of the granule.
 
 - **CUMULUS-1446**
   - Update the `@cumulus/integration-tests/api/executions.getExecution()`
@@ -138,6 +151,15 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
   - Added `@cumulus/aws-client/CloudFormation.getCfStackParameterValues()` to get multiple parameter values for a Cloudformation stack
 
 ### Changed
+
+- **CUMULUS-1736**
+  - The `collections` model in the API package now determines the name of a
+    collection based on the `name` property, rather than using `dataType` and
+    then falling back to `name`.
+  - The `@cumulus/integration-tests.loadCollection()` function no longer appends
+    the postfix to the end of the collection's `dataType`.
+  - The `@cumulus/integration-tests.addCollections()` function no longer appends
+    the postfix to the end of the collection's `dataType`.
 
 - **CUMULUS-1672**
   - Add a `retryOptions` parameter to the `@cumulus/aws-client/S3.headObject`
