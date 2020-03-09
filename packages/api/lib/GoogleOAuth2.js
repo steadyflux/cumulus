@@ -38,7 +38,7 @@ class GoogleOAuth2 extends OAuth2 {
   getAuthorizationUrl(state) {
     return this.googleOAuth2Client.generateAuthUrl({
       access_type: 'offline',
-      scope: [ 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'],
+      scope: ['https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'],
       state: state
     });
   }
