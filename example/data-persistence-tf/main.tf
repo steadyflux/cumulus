@@ -25,7 +25,7 @@ variable "tags" {
 
 terraform {
   required_providers {
-    aws = ">= 2.31.0"
+    aws = ">= 2.50.0"
   }
 }
 
