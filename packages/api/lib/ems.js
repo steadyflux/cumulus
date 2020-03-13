@@ -3,10 +3,17 @@
 const get = require('lodash.get');
 const moment = require('moment');
 const path = require('path');
-const aws = require('@cumulus/common/aws');
+const {
+  s3Join,
+  listS3ObjectsV2,
+  parseS3Uri,
+  s3CopyObject,
+  buildS3Uri,
+  getTextObject
+} = require('@cumulus/aws-client/S3');
+const { constructCollectionId } = require('@cumulus/common/collection-config-store');
 const log = require('@cumulus/common/log');
-const { constructCollectionId } = require('@cumulus/common');
-const { Sftp } = require('@cumulus/common/sftp');
+const SftpClient = require('@cumulus/sftp-client');
 const { Collection } = require('../models');
 
 /**
@@ -58,14 +65,14 @@ function buildReportFileName(reportType, startTime) {
 async function determineReportKey(reportType, reportStartTime, reportsPrefix) {
   let reportName = buildReportFileName(reportType, reportStartTime);
 
-  const revisionNumber = (await aws.listS3ObjectsV2({
+  const revisionNumber = (await listS3ObjectsV2({
     Bucket: process.env.system_bucket,
-    Prefix: aws.s3Join([reportsPrefix, reportName])
+    Prefix: s3Join([reportsPrefix, reportName])
   })).length;
 
   if (revisionNumber > 0) reportName = `${reportName}.rev${revisionNumber}`;
 
-  return aws.s3Join([reportsPrefix, reportName]);
+  return s3Join([reportsPrefix, reportName]);
 }
 
 /**
@@ -89,10 +96,28 @@ async function getExpiredS3Objects(bucket, prefix, retentionInDays) {
   const retentionFilter = (s3Object) =>
     s3Object.LastModified.getTime() <= moment.utc().subtract(retentionInDays, 'days').toDate().getTime();
 
-  return (await aws.listS3ObjectsV2({ Bucket: bucket, Prefix: prefix }))
+  return (await listS3ObjectsV2({ Bucket: bucket, Prefix: prefix }))
     .filter(retentionFilter)
     .filter((s3Object) => !s3Object.Key.endsWith('/'))
     .map((s3Object) => ({ Bucket: bucket, Key: s3Object.Key }));
+}
+
+async function retrievePrivateKey() {
+  const privateKeyFile = process.env.ems_privateKey || 'ems-private.pem';
+
+  let privateKey;
+  try {
+    privateKey = await getTextObject(process.env.system_bucket, `${process.env.stackName}/crypto/${privateKeyFile}`);
+  } catch (e) {
+    if (e.code === 'NoSuchKey') {
+      throw new Error(
+        `${privateKeyFile} does not exist in S3 crypto directory: s3://${process.env.system_bucket}/${process.env.stackName}/crypto/${privateKeyFile}`
+      );
+    }
+    throw e;
+  }
+
+  return privateKey;
 }
 
 /**
@@ -102,25 +127,26 @@ async function getExpiredS3Objects(bucket, prefix, retentionInDays) {
  * @returns {Array<Object>} - list of report type and its s3 file path {reportType, file}
  */
 async function submitReports(reports) {
-  const emsConfig = {
-    username: process.env.ems_username,
-    host: process.env.ems_host,
-    port: process.env.ems_port,
-    privateKey: process.env.ems_privateKey || 'ems-private.pem',
-    submitReport: process.env.ems_submitReport === 'true' || false
-  };
-
-  if (!emsConfig.submitReport) {
+  if (process.env.ems_submitReport !== 'true') {
     log.debug('EMS reports are not configured to be sent');
     return reports;
   }
 
+  const privateKey = await retrievePrivateKey();
+
+  const sshConfig = {
+    username: process.env.ems_username,
+    host: process.env.ems_host,
+    port: process.env.ems_port,
+    privateKey
+  };
+
   const reportsSent = [];
-  const sftpClient = new Sftp(emsConfig);
+  const sftpClient = new SftpClient(sshConfig);
 
   // submit files one by one using the same connection
   for (let i = 0; i < reports.length; i += 1) {
-    const parsed = aws.parseS3Uri(reports[i].file);
+    const parsed = parseS3Uri(reports[i].file);
     const keyfields = parsed.Key.split('/');
     const fileName = keyfields.pop();
     // eslint-disable-next-line no-await-in-loop
@@ -135,7 +161,7 @@ async function submitReports(reports) {
     const newKey = path.join(keyfields.join('/'), 'sent', fileName);
 
     // eslint-disable-next-line no-await-in-loop
-    await aws.s3CopyObject({
+    await s3CopyObject({
       CopySource: `${parsed.Bucket}/${parsed.Key}`,
       Bucket: parsed.Bucket,
       Key: newKey
@@ -143,7 +169,7 @@ async function submitReports(reports) {
 
     reportsSent.push({
       reportType: reports[i].reportType,
-      file: aws.buildS3Uri(parsed.Bucket, newKey)
+      file: buildS3Uri(parsed.Bucket, newKey)
     });
   }
 

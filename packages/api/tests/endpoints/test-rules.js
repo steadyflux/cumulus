@@ -4,11 +4,12 @@ const omit = require('lodash.omit');
 const test = require('ava');
 const request = require('supertest');
 const cloneDeep = require('lodash.clonedeep');
-const aws = require('@cumulus/common/aws');
+const awsServices = require('@cumulus/aws-client/services');
+const { recursivelyDeleteS3Bucket } = require('@cumulus/aws-client/S3');
 const { randomString } = require('@cumulus/common/test-utils');
 const bootstrap = require('../../lambdas/bootstrap');
 const models = require('../../models');
-const { createFakeJwtAuthToken } = require('../../lib/testUtils');
+const { createFakeJwtAuthToken, setAuthorizedOAuthUsers } = require('../../lib/testUtils');
 const { Search } = require('../../es/search');
 const indexer = require('../../es/indexer');
 const assertions = require('../../lib/assertions');
@@ -16,7 +17,6 @@ const assertions = require('../../lib/assertions');
 [
   'AccessTokensTable',
   'RulesTable',
-  'UsersTable',
   'stackName',
   'system_bucket',
   'TOKEN_SECRET'
@@ -49,7 +49,6 @@ let esClient;
 let jwtAuthToken;
 let accessTokenModel;
 let ruleModel;
-let userModel;
 
 test.before(async () => {
   const esAlias = randomString();
@@ -57,14 +56,14 @@ test.before(async () => {
   await bootstrap.bootstrapElasticSearch('fakehost', esIndex, esAlias);
 
   esClient = await Search.es('fakehost');
-  await aws.s3().createBucket({ Bucket: process.env.system_bucket }).promise();
+  await awsServices.s3().createBucket({ Bucket: process.env.system_bucket }).promise();
   await Promise.all([
-    aws.s3().putObject({
+    awsServices.s3().putObject({
       Bucket: process.env.system_bucket,
       Key: workflowfile,
       Body: '{}'
     }).promise(),
-    aws.s3().putObject({
+    awsServices.s3().putObject({
       Bucket: process.env.system_bucket,
       Key: templateFile,
       Body: '{}'
@@ -77,20 +76,19 @@ test.before(async () => {
   const ruleRecord = await ruleModel.create(testRule);
   await indexer.indexRule(esClient, ruleRecord, esAlias);
 
-  userModel = new models.User();
-  await userModel.createTable();
+  const username = randomString();
+  await setAuthorizedOAuthUsers([username]);
 
   accessTokenModel = new models.AccessToken();
   await accessTokenModel.createTable();
 
-  jwtAuthToken = await createFakeJwtAuthToken({ accessTokenModel, userModel });
+  jwtAuthToken = await createFakeJwtAuthToken({ accessTokenModel, username });
 });
 
 test.after.always(async () => {
   await accessTokenModel.deleteTable();
   await ruleModel.deleteTable();
-  await userModel.deleteTable();
-  await aws.recursivelyDeleteS3Bucket(process.env.system_bucket);
+  await recursivelyDeleteS3Bucket(process.env.system_bucket);
   await esClient.indices.delete({ index: esIndex });
 });
 
@@ -220,7 +218,7 @@ test('GET gets a rule', async (t) => {
 });
 
 test('When calling the API endpoint to delete an existing rule it does not return the deleted rule', async (t) => {
-  const newRule = Object.assign({}, testRule, { name: 'pop_culture_reference' });
+  const newRule = { ...testRule, name: 'pop_culture_reference' };
 
   let response = await request(app)
     .post('/rules')
@@ -243,7 +241,7 @@ test('When calling the API endpoint to delete an existing rule it does not retur
 });
 
 test('403 error when calling the API endpoint to delete an existing rule without an valid access token', async (t) => {
-  const newRule = Object.assign({}, testRule, { name: 'side_step_left' });
+  const newRule = { ...testRule, name: 'side_step_left' };
 
   let response = await request(app)
     .post('/rules')
@@ -293,7 +291,7 @@ test('POST creates a rule', async (t) => {
 });
 
 test('POST returns a record exists when one exists', async (t) => {
-  const newRule = Object.assign({}, testRule);
+  const newRule = { ...testRule };
 
   const response = await request(app)
     .post('/rules')
@@ -367,9 +365,7 @@ test('PUT returns 400 for name mismatch between params and payload',
   });
 
 test('DELETE deletes a rule', async (t) => {
-  const newRule = Object.assign({}, testRule, {
-    name: randomString()
-  });
+  const newRule = { ...testRule, name: randomString() };
 
   await request(app)
     .post('/rules')

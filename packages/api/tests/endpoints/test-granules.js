@@ -7,15 +7,20 @@ const sinon = require('sinon');
 const test = require('ava');
 const {
   buildS3Uri,
+  createBucket,
+  fileExists,
+  recursivelyDeleteS3Bucket
+} = require('@cumulus/aws-client/S3');
+const {
+  s3,
+  secretsManager,
   sfn
-} = require('@cumulus/common/aws');
-const aws = require('@cumulus/common/aws');
+} = require('@cumulus/aws-client/services');
 const cmrjs = require('@cumulus/cmrjs');
 const { CMR } = require('@cumulus/cmr-client');
 const {
   metadataObjectFromCMRFile
 } = require('@cumulus/cmrjs/cmr-utils');
-const { DefaultProvider } = require('@cumulus/common/key-pair-provider');
 const launchpad = require('@cumulus/common/launchpad');
 const { randomString, randomId } = require('@cumulus/common/test-utils');
 
@@ -27,7 +32,8 @@ const {
   fakeAccessTokenFactory,
   fakeCollectionFactory,
   fakeGranuleFactoryV2,
-  createFakeJwtAuthToken
+  createFakeJwtAuthToken,
+  setAuthorizedOAuthUsers
 } = require('../../lib/testUtils');
 const {
   createJwtToken
@@ -37,42 +43,30 @@ const { Search } = require('../../es/search');
 process.env.AccessTokensTable = randomId('token');
 process.env.CollectionsTable = randomId('collection');
 process.env.GranulesTable = randomId('granules');
-process.env.UsersTable = randomId('users');
 process.env.stackName = randomId('stackname');
-process.env.system_bucket = randomId('system_bucket');
+process.env.system_bucket = randomId('systembucket');
 process.env.TOKEN_SECRET = randomId('secret');
 
 // import the express app after setting the env variables
 const { app } = require('../../app');
-
-const createBucket = (Bucket) => aws.s3().createBucket({ Bucket }).promise();
 
 function createBuckets(buckets) {
   return Promise.all(buckets.map(createBucket));
 }
 
 function deleteBuckets(buckets) {
-  return Promise.all(buckets.map(aws.recursivelyDeleteS3Bucket));
+  return Promise.all(buckets.map(recursivelyDeleteS3Bucket));
 }
 
-const putObject = (params) => aws.s3().putObject(params).promise();
+const putObject = (params) => s3().putObject(params).promise();
 
 async function runTestUsingBuckets(buckets, testFunction) {
   try {
     await createBuckets(buckets);
     await testFunction();
   } finally {
-    await Promise.all(buckets.map(aws.recursivelyDeleteS3Bucket));
+    await Promise.all(buckets.map(recursivelyDeleteS3Bucket));
   }
-}
-
-/**
- * helper for cleaning up after move files tests.
- * @param {string} publicBucket - public bucket created in setupBucketsConfig
- */
-async function teardownBuckets(publicBucket) {
-  await deleteBuckets([publicBucket, process.env.system_bucket]);
-  await createBucket(process.env.system_bucket);
 }
 
 /**
@@ -102,7 +96,6 @@ async function setupBucketsConfig() {
   return { internalBucket: systemBucket, publicBucket: buckets.public.name };
 }
 
-
 // create all the variables needed across this test
 let esClient;
 let esIndex;
@@ -110,7 +103,6 @@ let accessTokenModel;
 let granuleModel;
 let collectionModel;
 let accessToken;
-let userModel;
 
 test.before(async (t) => {
   esIndex = randomId('esindex');
@@ -138,19 +130,25 @@ test.before(async (t) => {
   granuleModel = new models.Granule();
   await granuleModel.createTable();
 
-  // create fake Users table
-  userModel = new models.User();
-  await userModel.createTable();
+  const username = randomString();
+  await setAuthorizedOAuthUsers([username]);
 
   accessTokenModel = new models.AccessToken();
   await accessTokenModel.createTable();
 
-  accessToken = await createFakeJwtAuthToken({ accessTokenModel, userModel });
+  accessToken = await createFakeJwtAuthToken({ accessTokenModel, username });
 
   // Store the CMR password
   process.env.cmr_password_secret_name = randomString();
-  await aws.secretsManager().createSecret({
+  await secretsManager().createSecret({
     Name: process.env.cmr_password_secret_name,
+    SecretString: randomString()
+  }).promise();
+
+  // Store the Launchpad passphrase
+  process.env.launchpad_passphrase_secret_name = randomString();
+  await secretsManager().createSecret({
+    Name: process.env.launchpad_passphrase_secret_name,
     SecretString: randomString()
   }).promise();
 });
@@ -160,7 +158,6 @@ test.beforeEach(async (t) => {
 
   t.context.testCollection = fakeCollectionFactory({
     name: 'fakeCollection',
-    dataType: 'fakeCollection',
     version: 'v1',
     duplicateHandling: 'error'
   });
@@ -181,11 +178,14 @@ test.after.always(async () => {
   await collectionModel.deleteTable();
   await granuleModel.deleteTable();
   await accessTokenModel.deleteTable();
-  await userModel.deleteTable();
   await esClient.indices.delete({ index: esIndex });
-  await aws.recursivelyDeleteS3Bucket(process.env.system_bucket);
-  await aws.secretsManager().deleteSecret({
+  await recursivelyDeleteS3Bucket(process.env.system_bucket);
+  await secretsManager().deleteSecret({
     SecretId: process.env.cmr_password_secret_name,
+    ForceDeleteWithoutRecovery: true
+  }).promise();
+  await secretsManager().deleteSecret({
+    SecretId: process.env.launchpad_passphrase_secret_name,
     ForceDeleteWithoutRecovery: true
   }).promise();
 });
@@ -477,11 +477,6 @@ test.serial('remove a granule from CMR with launchpad authentication', async (t)
   const launchpadStub = sinon.stub(launchpad, 'getLaunchpadToken').callsFake(() => randomString());
 
   sinon.stub(
-    DefaultProvider,
-    'decrypt'
-  ).callsFake(() => Promise.resolve('fakePassword'));
-
-  sinon.stub(
     CMR.prototype,
     'deleteGranule'
   ).callsFake(() => Promise.resolve());
@@ -511,7 +506,6 @@ test.serial('remove a granule from CMR with launchpad authentication', async (t)
   process.env.cmr_oauth_provider = 'earthdata';
   launchpadStub.restore();
   CMR.prototype.deleteGranule.restore();
-  DefaultProvider.decrypt.restore();
   cmrjs.getMetadata.restore();
 });
 
@@ -592,7 +586,7 @@ test('DELETE deleting an existing unpublished granule', async (t) => {
   /* eslint-disable no-await-in-loop */
   for (let i = 0; i < newGranule.files.length; i += 1) {
     const file = newGranule.files[i];
-    t.false(await aws.fileExists(file.bucket, file.key));
+    t.false(await fileExists(file.bucket, file.key));
   }
   /* eslint-enable no-await-in-loop */
 
@@ -600,6 +594,28 @@ test('DELETE deleting an existing unpublished granule', async (t) => {
     buckets.protected.name,
     buckets.public.name
   ]);
+});
+
+test('DELETE for a granule with a file not present in S3 succeeds', async (t) => {
+  const newGranule = fakeGranuleFactoryV2({ status: 'failed' });
+  newGranule.published = false;
+  newGranule.files = [
+    {
+      bucket: process.env.system_bucket,
+      fileName: `${newGranule.granuleId}.hdf`,
+      key: randomString()
+    }
+  ];
+
+  // create a new unpublished granule
+  await granuleModel.create(newGranule);
+
+  const response = await request(app)
+    .delete(`/granules/${newGranule.granuleId}`)
+    .set('Accept', 'application/json')
+    .set('Authorization', `Bearer ${accessToken}`);
+
+  t.is(response.status, 200);
 });
 
 test.serial('move a granule with no .cmr.xml file', async (t) => {
@@ -676,7 +692,7 @@ test.serial('move a granule with no .cmr.xml file', async (t) => {
       t.is(body.status, 'SUCCESS');
       t.is(body.action, 'move');
 
-      const bucketObjects = await aws.s3().listObjects({
+      const bucketObjects = await s3().listObjects({
         Bucket: bucket,
         Prefix: destinationFilepath
       }).promise();
@@ -687,7 +703,7 @@ test.serial('move a granule with no .cmr.xml file', async (t) => {
       });
 
 
-      const thirdBucketObjects = await aws.s3().listObjects({
+      const thirdBucketObjects = await s3().listObjects({
         Bucket: thirdBucket,
         Prefix: destinationFilepath
       }).promise();
@@ -774,14 +790,14 @@ test.serial('move a file and update ECHO10 xml metadata', async (t) => {
   t.is(body.status, 'SUCCESS');
   t.is(body.action, 'move');
 
-  const list = await aws.s3().listObjects({
+  const list = await s3().listObjects({
     Bucket: internalBucket,
     Prefix: destinationFilepath
   }).promise();
   t.is(list.Contents.length, 1);
   t.is(list.Contents[0].Key.indexOf(destinationFilepath), 0);
 
-  const list2 = await aws.s3().listObjects({
+  const list2 = await s3().listObjects({
     Bucket: publicBucket,
     Prefix: `${process.env.stackName}/original_filepath`
   }).promise();
@@ -789,7 +805,7 @@ test.serial('move a file and update ECHO10 xml metadata', async (t) => {
   t.is(newGranule.files[1].key, list2.Contents[0].Key);
 
   const xmlObject = await metadataObjectFromCMRFile(
-    aws.buildS3Uri(newGranule.files[1].bucket, newGranule.files[1].key)
+    buildS3Uri(newGranule.files[1].bucket, newGranule.files[1].key)
   );
 
   const newUrls = xmlObject.Granule.OnlineAccessURLs.OnlineAccessURL.map((obj) => obj.URL);
@@ -804,7 +820,7 @@ test.serial('move a file and update ECHO10 xml metadata', async (t) => {
   });
 
   CMR.prototype.ingestGranule.restore();
-  await teardownBuckets(publicBucket);
+  await recursivelyDeleteS3Bucket(publicBucket);
 });
 
 test.serial('move a file and update its UMM-G JSON metadata', async (t) => {
@@ -836,7 +852,7 @@ test.serial('move a file and update its UMM-G JSON metadata', async (t) => {
     return putObject({ Bucket: file.bucket, Key: file.key, Body: ummgMetadataString });
   }));
 
-  const destinationFilepath = `${process.env.stackName}/moved_granules`;
+  const destinationFilepath = `${process.env.stackName}/moved_granules/${randomString()}`;
   const destinations = [
     {
       regex: '.*.txt$',
@@ -866,7 +882,7 @@ test.serial('move a file and update its UMM-G JSON metadata', async (t) => {
   t.is(body.action, 'move');
 
   // text file has moved to correct location
-  const list = await aws.s3().listObjects({
+  const list = await s3().listObjects({
     Bucket: internalBucket,
     Prefix: destinationFilepath
   }).promise();
@@ -874,7 +890,7 @@ test.serial('move a file and update its UMM-G JSON metadata', async (t) => {
   t.is(list.Contents[0].Key.indexOf(destinationFilepath), 0);
 
   // CMR JSON  is in same location.
-  const list2 = await aws.s3().listObjects({
+  const list2 = await s3().listObjects({
     Bucket: publicBucket,
     Prefix: `${process.env.stackName}/original_filepath`
   }).promise();
@@ -883,7 +899,7 @@ test.serial('move a file and update its UMM-G JSON metadata', async (t) => {
 
   // CMR UMMG JSON has been updated with the location of the moved file.
   const ummgObject = await metadataObjectFromCMRFile(
-    aws.buildS3Uri(newGranule.files[1].bucket, newGranule.files[1].key)
+    buildS3Uri(newGranule.files[1].bucket, newGranule.files[1].key)
   );
   const updatedURLs = ummgObject.RelatedUrls.map((urlObj) => urlObj.URL);
   const newDestination = `${process.env.DISTRIBUTION_ENDPOINT}${destinations[0].bucket}/${destinations[0].filepath}/${newGranule.files[0].fileName}`;
@@ -896,7 +912,7 @@ test.serial('move a file and update its UMM-G JSON metadata', async (t) => {
   });
 
   CMR.prototype.ingestUMMGranule.restore();
-  await teardownBuckets(publicBucket);
+  await recursivelyDeleteS3Bucket(publicBucket);
 });
 
 test.serial('PUT with action move returns failure if one granule file exists', async (t) => {

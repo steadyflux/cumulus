@@ -26,19 +26,11 @@ module "post_to_cmr_task" {
 
   enable_versioning = var.enable_task_versioning
 
-  tags = merge(local.default_tags, { Project = var.prefix })
+  tags = var.tags
 }
 
 resource "aws_cloudwatch_log_group" "post_to_cmr_task" {
   name = "/aws/lambda/${module.post_to_cmr_task.lambda_function_name}"
   retention_in_days = 30
-  tags = local.default_tags
-}
-
-resource "aws_cloudwatch_log_subscription_filter" "post_to_cmr_task" {
-  name            = "${var.prefix}-PostToCmrSubscription"
-  destination_arn = var.log2elasticsearch_lambda_function_arn
-  filter_pattern  = ""
-  log_group_name  = aws_cloudwatch_log_group.post_to_cmr_task.name
-  distribution    = "ByLogStream"
+  tags = var.tags
 }

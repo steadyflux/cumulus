@@ -1,22 +1,24 @@
 'use strict';
 
-const omit = require('lodash.omit');
 const test = require('ava');
 const request = require('supertest');
-const aws = require('@cumulus/common/aws');
+const awsServices = require('@cumulus/aws-client/services');
+const {
+  recursivelyDeleteS3Bucket
+} = require('@cumulus/aws-client/S3');
 const { randomString } = require('@cumulus/common/test-utils');
 const models = require('../../../models');
 const bootstrap = require('../../../lambdas/bootstrap');
 const {
   createFakeJwtAuthToken,
-  fakeCollectionFactory
+  fakeCollectionFactory,
+  setAuthorizedOAuthUsers
 } = require('../../../lib/testUtils');
 const { Search } = require('../../../es/search');
 const assertions = require('../../../lib/assertions');
 
 process.env.AccessTokensTable = randomString();
 process.env.CollectionsTable = randomString();
-process.env.UsersTable = randomString();
 process.env.stackName = randomString();
 process.env.system_bucket = randomString();
 process.env.TOKEN_SECRET = randomString();
@@ -30,26 +32,24 @@ let esClient;
 let jwtAuthToken;
 let accessTokenModel;
 let collectionModel;
-let userModel;
 
 test.before(async () => {
   const esAlias = randomString();
   process.env.ES_INDEX = esAlias;
   await bootstrap.bootstrapElasticSearch('fakehost', esIndex, esAlias);
 
-  await aws.s3().createBucket({ Bucket: process.env.system_bucket }).promise();
+  await awsServices.s3().createBucket({ Bucket: process.env.system_bucket }).promise();
 
   collectionModel = new models.Collection({ tableName: process.env.CollectionsTable });
   await collectionModel.createTable();
 
-  // create fake Users table
-  userModel = new models.User();
-  await userModel.createTable();
+  const username = randomString();
+  await setAuthorizedOAuthUsers([username]);
 
   accessTokenModel = new models.AccessToken();
   await accessTokenModel.createTable();
 
-  jwtAuthToken = await createFakeJwtAuthToken({ accessTokenModel, userModel });
+  jwtAuthToken = await createFakeJwtAuthToken({ accessTokenModel, username });
   esClient = await Search.es('fakehost');
 });
 
@@ -61,8 +61,7 @@ test.beforeEach(async (t) => {
 test.after.always(async () => {
   await accessTokenModel.deleteTable();
   await collectionModel.deleteTable();
-  await userModel.deleteTable();
-  await aws.recursivelyDeleteS3Bucket(process.env.system_bucket);
+  await recursivelyDeleteS3Bucket(process.env.system_bucket);
   await esClient.indices.delete({ index: esIndex });
 });
 
@@ -88,38 +87,32 @@ test('CUMULUS-912 PUT with pathParameters and with an invalid access token retur
 test.todo('CUMULUS-912 PUT with pathParameters and with an unauthorized user returns an unauthorized response');
 
 test('PUT replaces an existing collection', async (t) => {
-  const { testCollection, testCollection: { name, version } } = t.context;
-  const expectedCollection = {
-    ...omit(testCollection, ['dataType', 'duplicateHandling']),
-    provider_path: 'test_path'
+  const originalCollection = fakeCollectionFactory({ process: randomString() });
+  await collectionModel.create(originalCollection);
+
+  const updatedCollection = {
+    ...originalCollection,
+    provider_path: randomString()
   };
 
-  // Make sure testCollection contains values for the properties we omitted from
-  // expectedCollection to confirm that after we replace (PUT) the collection
-  // those properties are dropped from the stored collection.
-  t.truthy(testCollection.dataType);
-  t.truthy(testCollection.duplicateHandling);
+  delete updatedCollection.process;
 
   await request(app)
-    .put(`/collections/${name}/${version}`)
+    .put(`/collections/${originalCollection.name}/${originalCollection.version}`)
     .set('Accept', 'application/json')
     .set('Authorization', `Bearer ${jwtAuthToken}`)
-    .send(expectedCollection)
+    .send(updatedCollection)
     .expect(200);
 
-  const { body: actualCollection } = await request(app)
-    .get(`/collections/${name}/${version}`)
-    .set('Accept', 'application/json')
-    .set('Authorization', `Bearer ${jwtAuthToken}`)
-    .expect(200);
-
-  t.deepEqual(actualCollection, {
-    ...expectedCollection,
-    duplicateHandling: 'error', // Default value
-    reportToEms: true, // Default value
-    createdAt: actualCollection.createdAt,
-    updatedAt: actualCollection.updatedAt
+  const fetchedCollection = await collectionModel.get({
+    name: originalCollection.name,
+    version: originalCollection.version
   });
+
+  t.is(fetchedCollection.name, originalCollection.name);
+  t.is(fetchedCollection.version, originalCollection.version);
+  t.is(fetchedCollection.provider_path, updatedCollection.provider_path);
+  t.is(fetchedCollection.process, undefined);
 });
 
 test('PUT returns 404 for non-existent collection', async (t) => {

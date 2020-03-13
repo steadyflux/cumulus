@@ -6,20 +6,20 @@ output "api_redirect_uri" {
   value = local.api_redirect_uri
 }
 
-output "cw_sf_execution_event_to_db_lambda_function_arn" {
-  value = aws_lambda_function.cw_sf_execution_event_to_db.arn
+output "sf_event_sqs_to_db_records_sqs_queue_url" {
+  value = aws_sqs_queue.sf_event_sqs_to_db_records_input_queue.id
 }
 
-output "encrypted_launchpad_passphrase" {
-  value = jsondecode(data.aws_lambda_invocation.custom_bootstrap.result).Data.LaunchpadPassphrase
+output "sf_event_sqs_to_db_records_sqs_queue_arn" {
+  value = aws_sqs_queue.sf_event_sqs_to_db_records_input_queue.arn
 }
 
 output "log2elasticsearch_lambda_function_arn" {
   value = aws_lambda_function.log2elasticsearch.arn
 }
 
-output "publish_reports_lambda_function_arn" {
-  value = aws_lambda_function.publish_reports.arn
+output "provider_kms_key_arn" {
+  value = aws_kms_key.provider_kms_key.arn
 }
 
 output "report_executions_sns_topic_arn" {
@@ -32,4 +32,8 @@ output "report_granules_sns_topic_arn" {
 
 output "report_pdrs_sns_topic_arn" {
   value = aws_sns_topic.report_pdrs_topic.arn
+}
+
+output "async_operation_log_group" {
+  value = aws_cloudwatch_log_group.async_operation.name
 }

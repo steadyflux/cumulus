@@ -41,12 +41,6 @@ echo "Deploying Cumulus data-persistence module to $DEPLOYMENT"
   -var "aws_region=$AWS_REGION" \
   -var "subnet_ids=[\"$AWS_SUBNET\"]"
 
-# Test that deployment succeeded by failing on bad exit code.
-EXIT_CODE=$?
-if [ $EXIT_CODE -ne  0 ]; then
-  exit $EXIT_CODE
-fi
-
 cd ../cumulus-tf
 # Ensure remote state is configured for the deployment
 echo "terraform {
@@ -62,14 +56,21 @@ echo "terraform {
 ../terraform init \
   -input=false
 
+if [[ $NGAP_ENV = "SIT" ]]; then
+  BASE_VAR_FILE="sit.tfvars"
+  CMA_LAYER_VERSION=7
+else
+  BASE_VAR_FILE="sandbox.tfvars"
+  CMA_LAYER_VERSION=12
+fi
 # Deploy cumulus-tf via terraform
 echo "Deploying Cumulus example to $DEPLOYMENT"
 ../terraform apply \
   -auto-approve \
   -input=false \
-  -var-file="../deployments/sandbox.tfvars" \
+  -var-file="../deployments/$BASE_VAR_FILE" \
   -var-file="../deployments/$DEPLOYMENT.tfvars" \
-  -var "cumulus_message_adapter_lambda_layer_arn=arn:aws:lambda:us-east-1:$AWS_ACCOUNT_ID:layer:Cumulus_Message_Adapter:10" \
+  -var "cumulus_message_adapter_lambda_layer_arn=arn:aws:lambda:us-east-1:$AWS_ACCOUNT_ID:layer:Cumulus_Message_Adapter:$CMA_LAYER_VERSION" \
   -var "cmr_username=$CMR_USERNAME" \
   -var "cmr_password=$CMR_PASSWORD" \
   -var "cmr_client_id=cumulus-core-$DEPLOYMENT" \
@@ -84,9 +85,3 @@ echo "Deploying Cumulus example to $DEPLOYMENT"
   -var "urs_client_password=$EARTHDATA_CLIENT_PASSWORD" \
   -var "token_secret=$TOKEN_SECRET" \
   -var "permissions_boundary_arn=arn:aws:iam::$AWS_ACCOUNT_ID:policy/NGAPShRoleBoundary"
-
-# Test that deployment succeeded by failing on bad exit code.
-EXIT_CODE=$?
-if [ $EXIT_CODE -ne  0 ]; then
-  exit $EXIT_CODE
-fi

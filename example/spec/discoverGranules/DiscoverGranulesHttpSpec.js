@@ -1,7 +1,7 @@
 'use strict';
 
 const { Execution } = require('@cumulus/api/models');
-const { LambdaStep } = require('@cumulus/common/sfnStep');
+const { LambdaStep } = require('@cumulus/integration-tests/sfnStep');
 const {
   api: apiTestUtils,
   addCollections,
@@ -107,7 +107,7 @@ describe('The Discover Granules workflow with http Protocol', () => {
     });
   });
 
-  describe('the sf-sns-report task has published a sns message and', () => {
+  describe('the reporting lambda has received the cloudwatch stepfunction event and', () => {
     it('the execution record is added to DynamoDB', async () => {
       const record = await waitForModelStatus(
         executionModel,

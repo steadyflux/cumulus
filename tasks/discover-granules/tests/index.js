@@ -3,7 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const test = require('ava');
-const { recursivelyDeleteS3Bucket, s3 } = require('@cumulus/common/aws');
+const { s3 } = require('@cumulus/aws-client/services');
+const { recursivelyDeleteS3Bucket } = require('@cumulus/aws-client/S3');
 const {
   randomString,
   validateConfig,
@@ -41,19 +42,12 @@ test('discover granules sets the correct dataType for granules', async (t) => {
 
   await validateConfig(t, event.config);
 
-  try {
-    const output = await discoverGranules(event);
-    await assertDiscoveredGranules(t, output);
+  const output = await discoverGranules(event);
+  await assertDiscoveredGranules(t, output);
 
-    // Make sure we support datatype and collection name
-    output.granules.forEach((granule) => {
-      t.not(granule.dataType, event.config.collection.name);
-    });
-  } catch (e) {
-    if (e.message === 'Connection Refused') {
-      t.pass('Ignoring this test. Remote host seems to be down.');
-    } else throw e;
-  }
+  output.granules.forEach((granule) => {
+    t.is(granule.dataType, event.config.collection.name);
+  });
 });
 
 test('discover granules using FTP', async (t) => {

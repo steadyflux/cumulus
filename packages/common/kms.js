@@ -1,13 +1,15 @@
 'use strict';
 
 const AWS = require('aws-sdk');
+const { createErrorType } = require('@cumulus/errors');
 
-const errors = require('./errors');
-
-const KMSDecryptionFailed = errors.createErrorType('KMSDecryptionFailed');
+const KMSDecryptionFailed = createErrorType('KMSDecryptionFailed');
+const { deprecate } = require('./util');
 
 class KMS {
   static async encrypt(text, kmsId) {
+    deprecate('@cumulus/common/key-pair-provider', '1.17.0', '@cumulus/aws-client/KMS.encrypt');
+
     const params = {
       KeyId: kmsId,
       Plaintext: text
@@ -19,6 +21,8 @@ class KMS {
   }
 
   static async decrypt(text) {
+    deprecate('@cumulus/common/key-pair-provider', '1.17.0', '@cumulus/aws-client/KMS.decryptBase64String');
+
     const params = {
       CiphertextBlob: Buffer.from(text, 'base64')
     };

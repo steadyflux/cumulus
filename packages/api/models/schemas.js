@@ -36,11 +36,16 @@ module.exports.asyncOperation = {
   title: 'AsyncOperation Object',
   description: 'Cumulus API AsyncOperation Table schema',
   type: 'object',
-  required: ['createdAt', 'id', 'status', 'updatedAt'],
+  required: ['createdAt', 'id', 'status', 'updatedAt', 'description', 'operationType'],
   additionalProperties: false,
   properties: {
     createdAt: { type: 'integer' },
     id: { type: 'string' },
+    description: { type: 'string' },
+    operationType: {
+      type: 'string',
+      enum: ['ES Index', 'Bulk Granules', 'Bulk Delete', 'Kinesis Replay']
+    },
     output: {
       description: 'The result of the operation, stored as JSON',
       type: 'string'
@@ -72,7 +77,7 @@ module.exports.collection = {
     },
     dataType: {
       title: 'DataType',
-      description: 'This is used to identify a granule in a PDR',
+      description: 'This field is deprecated and unused',
       type: 'string'
     },
     process: {
@@ -124,11 +129,11 @@ module.exports.collection = {
     ignoreFilesConfigForDiscovery: {
       title: 'Ignore Files Configuration During Discovery',
       description: "When true, ignore this collection's files config list for"
-        + " determining which files to ingest for a granule, and ingest all of"
-        + " them.  When false, ingest only files that match a regex in one of"
+        + ' determining which files to ingest for a granule, and ingest all of'
+        + ' them.  When false, ingest only files that match a regex in one of'
         + " this collection's files config list.  When this property is"
-        + " specified on a task, it overrides the value set on a collection."
-        + " Defaults to false.",
+        + ' specified on a task, it overrides the value set on a collection.'
+        + ' Defaults to false.',
       type: 'boolean'
     },
     files: {
@@ -615,7 +620,7 @@ module.exports.execution = {
     error: {
       title: 'The error details in case of a failed execution',
       type: 'object',
-      additionalProperties: true,
+      additionalProperties: true
     },
     tasks: {
       type: 'object',
@@ -660,15 +665,4 @@ module.exports.execution = {
     'status',
     'createdAt'
   ]
-};
-
-module.exports.user = {
-  type: 'object',
-  properties: {
-    createdAt: { type: 'integer' },
-    expires: { type: 'integer' },
-    password: { type: 'string' },
-    updatedAt: { type: 'integer' },
-    userName: { type: 'string' }
-  }
 };

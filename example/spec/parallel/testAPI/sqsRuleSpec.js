@@ -1,10 +1,11 @@
 'use strict';
 
 const fs = require('fs-extra');
-const { stringUtils: { globalReplace } } = require('@cumulus/common');
-const { sqs, receiveSQSMessages } = require('@cumulus/common/aws');
+const { sqs } = require('@cumulus/aws-client/services');
+const { receiveSQSMessages } = require('@cumulus/aws-client/SQS');
 const { createSqsQueues, getSqsQueueMessageCounts } = require('@cumulus/api/lib/testUtils');
 const { Granule } = require('@cumulus/api/models');
+const { globalReplace } = require('@cumulus/common/string');
 const { sleep } = require('@cumulus/common/util');
 const {
   addCollections,
@@ -13,8 +14,9 @@ const {
   granulesApi: granulesApiTestUtils,
   cleanupProviders,
   cleanupCollections,
-  rulesList,
-  deleteRules
+  readJsonFilesFromDir,
+  deleteRules,
+  setProcessEnvironment
 } = require('@cumulus/integration-tests');
 
 const { waitForModelStatus } = require('../../helpers/apiUtils');
@@ -62,8 +64,9 @@ async function setupCollectionAndTestData() {
 }
 
 async function cleanUp() {
+  setProcessEnvironment(config.stackName, config.bucket);
   console.log(`\nDeleting rule ${ruleOverride.name}`);
-  const rules = await rulesList(config.stackName, config.bucket, ruleDirectory);
+  const rules = await readJsonFilesFromDir(ruleDirectory);
   await deleteRules(config.stackName, config.bucket, rules, ruleSuffix);
   await Promise.all([
     deleteFolder(config.bucket, testDataFolder),
@@ -129,14 +132,14 @@ describe('The SQS rule', () => {
 
   describe('When posting messages to the configured SQS queue', () => {
     let granuleId;
-    const invalidMessage = { foo: 'bar' };
+    const invalidMessage = JSON.stringify({ foo: 'bar' });
 
     beforeAll(async () => {
       // post a valid message for ingesting a granule
       granuleId = await ingestGranule(queues.queueUrl);
 
       // post a non-processable message
-      await sqs().sendMessage({ QueueUrl: queues.queueUrl, MessageBody: JSON.stringify(invalidMessage) }).promise();
+      await sqs().sendMessage({ QueueUrl: queues.queueUrl, MessageBody: invalidMessage }).promise();
     });
 
     afterAll(async () => {

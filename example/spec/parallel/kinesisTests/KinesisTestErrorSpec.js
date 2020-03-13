@@ -2,11 +2,9 @@
 
 const fs = require('fs');
 
-const {
-  aws: { deleteSQSMessage },
-  testUtils: { randomString },
-  stringUtils: { globalReplace }
-} = require('@cumulus/common');
+const { deleteSQSMessage } = require('@cumulus/aws-client/SQS');
+const { globalReplace } = require('@cumulus/common/string');
+const { randomString } = require('@cumulus/common/test-utils');
 
 const { sleep } = require('@cumulus/common/util');
 
@@ -17,7 +15,8 @@ const {
   cleanupProviders,
   addCollections,
   cleanupCollections,
-  rulesList
+  readJsonFilesFromDir,
+  setProcessEnvironment
 } = require('@cumulus/integration-tests');
 
 const {
@@ -63,8 +62,10 @@ describe('The messageConsumer receives a bad record.\n', () => {
       console.log('Delete the Record from the queue.');
       await deleteSQSMessage(failureSqsUrl, this.ReceiptHandle);
     }
+
+    setProcessEnvironment(testConfig.stackName, testConfig.bucket);
     console.log(`\nDeleting ${ruleOverride.name}`);
-    const rules = await rulesList(testConfig.stackName, testConfig.bucket, ruleDirectory);
+    const rules = await readJsonFilesFromDir(ruleDirectory);
     // clean up stack state added by test
     console.log(`\nDeleting testStream '${streamName}'`);
     await Promise.all([

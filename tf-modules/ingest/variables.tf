@@ -69,7 +69,7 @@ variable "lambda_processing_role_arn" {
 
 variable "lambda_subnet_ids" {
   type    = list(string)
-  default = null
+  default = []
 }
 
 variable "launchpad_api" {
@@ -85,10 +85,6 @@ variable "launchpad_passphrase" {
   default = ""
 }
 
-variable "log2elasticsearch_lambda_function_arn" {
-  type = string
-}
-
 variable "permissions_boundary_arn" {
   type = string
 }
@@ -97,15 +93,7 @@ variable "prefix" {
   type = string
 }
 
-variable "report_executions_sns_topic_arn" {
-  type = string
-}
-
-variable "report_granules_sns_topic_arn" {
-  type = string
-}
-
-variable "report_pdrs_sns_topic_arn" {
+variable "sf_event_sqs_to_db_records_sqs_queue_url" {
   type = string
 }
 
@@ -121,6 +109,12 @@ variable "system_bucket" {
 variable "task_version" {
   type = string
   default = null
+}
+
+variable "tags" {
+  description = "Tags to be applied to managed resources"
+  type        = map(string)
+  default     = {}
 }
 
 variable "throttled_queues" {

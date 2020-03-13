@@ -11,6 +11,18 @@ variable "aws_region" {
   default = "us-east-1"
 }
 
+variable "enable_point_in_time_tables" {
+  description = "DynamoDB table names that should have point in time recovery enabled"
+  type        = list(string)
+  default     = []
+}
+
+variable "tags" {
+  description = "Tags to be applied to Cumulus resources that support tags"
+  type        = map(string)
+  default     = {}
+}
+
 terraform {
   required_providers {
     aws = ">= 2.31.0"
@@ -26,6 +38,10 @@ module "data_persistence" {
 
   prefix                     = var.prefix
   subnet_ids                 = var.subnet_ids
+
+  enable_point_in_time_tables = var.enable_point_in_time_tables
+
+  tags = merge(var.tags, { Deployment = var.prefix })
 }
 
 output "dynamo_tables" {

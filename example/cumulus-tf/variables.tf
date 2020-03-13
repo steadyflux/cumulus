@@ -88,7 +88,7 @@ variable "saml_idp_login" {
   default = "N/A"
 }
 
-variable "saml_launchpad_metadata_path" {
+variable "saml_launchpad_metadata_url" {
   type    = string
   default = "N/A"
 }
@@ -231,6 +231,12 @@ variable "private_archive_api_gateway" {
   default = true
 }
 
+variable "thin_egress_jwt_secret_name" {
+  type        = string
+  description = "Name of AWS secret where keys for the Thin Egress App JWT encode/decode are stored"
+  default     = "cumulus_sandbox_jwt_tea_secret"
+}
+
 variable "metrics_es_host" {
   type = string
   default = null
@@ -244,4 +250,15 @@ variable "metrics_es_password" {
 variable "metrics_es_username" {
   type = string
   default = null
+}
+
+variable "additional_log_groups_to_elk" {
+  type = map(string)
+  default = {}
+}
+
+variable "tags" {
+  description = "Tags to be applied to Cumulus resources that support tags"
+  type        = map(string)
+  default     = {}
 }

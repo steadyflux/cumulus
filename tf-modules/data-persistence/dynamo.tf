@@ -11,7 +11,6 @@ locals {
     providers_table        = "${var.prefix}-ProvidersTable"
     rules_table            = "${var.prefix}-RulesTable"
     semaphores_table       = "${var.prefix}-SemaphoresTable"
-    users_table            = "${var.prefix}-UsersTable"
   }
 }
 
@@ -31,15 +30,18 @@ resource "aws_dynamodb_table" "access_tokens_table" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [ name ]
   }
 
-  tags = local.default_tags
+  tags = var.tags
 }
 
 resource "aws_dynamodb_table" "async_operations_table" {
   name         = local.table_names.async_operations_table
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "id"
+  stream_enabled   = true
+  stream_view_type = "NEW_AND_OLD_IMAGES"
 
   attribute {
     name = "id"
@@ -52,9 +54,10 @@ resource "aws_dynamodb_table" "async_operations_table" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [ name ]
   }
 
-  tags = local.default_tags
+  tags = var.tags
 }
 
 resource "aws_dynamodb_table" "collections_table" {
@@ -81,9 +84,10 @@ resource "aws_dynamodb_table" "collections_table" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [ name ]
   }
 
-  tags = local.default_tags
+  tags = var.tags
 }
 
 resource "aws_dynamodb_table" "executions_table" {
@@ -101,12 +105,13 @@ resource "aws_dynamodb_table" "executions_table" {
   point_in_time_recovery {
     enabled = contains(local.enable_point_in_time_table_names, local.table_names.executions_table)
   }
-  
+
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [ name ]
   }
 
-  tags = local.default_tags
+  tags = var.tags
 }
 
 resource "aws_dynamodb_table" "files_table" {
@@ -133,9 +138,10 @@ resource "aws_dynamodb_table" "files_table" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [ name ]
   }
 
-  tags = local.default_tags
+  tags = var.tags
 }
 
 resource "aws_dynamodb_table" "granules_table" {
@@ -168,9 +174,10 @@ resource "aws_dynamodb_table" "granules_table" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [ name ]
   }
 
-  tags = local.default_tags
+  tags = var.tags
 }
 
 resource "aws_dynamodb_table" "pdrs_table" {
@@ -191,9 +198,10 @@ resource "aws_dynamodb_table" "pdrs_table" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [ name ]
   }
 
-  tags = local.default_tags
+  tags = var.tags
 }
 
 resource "aws_dynamodb_table" "providers_table" {
@@ -214,9 +222,10 @@ resource "aws_dynamodb_table" "providers_table" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [ name ]
   }
 
-  tags = local.default_tags
+  tags = var.tags
 }
 
 resource "aws_dynamodb_table" "rules_table" {
@@ -237,9 +246,10 @@ resource "aws_dynamodb_table" "rules_table" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [ name ]
   }
 
-  tags = local.default_tags
+  tags = var.tags
 }
 
 resource "aws_dynamodb_table" "semaphores_table" {
@@ -258,30 +268,8 @@ resource "aws_dynamodb_table" "semaphores_table" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [ name ]
   }
 
-  tags = local.default_tags
-}
-
-resource "aws_dynamodb_table" "users_table" {
-  name             = local.table_names.users_table
-  billing_mode     = "PAY_PER_REQUEST"
-  hash_key         = "userName"
-  stream_enabled   = true
-  stream_view_type = "NEW_AND_OLD_IMAGES"
-
-  attribute {
-    name = "userName"
-    type = "S"
-  }
-
-  point_in_time_recovery {
-    enabled = contains(local.enable_point_in_time_table_names, local.table_names.users_table)
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-
-  tags = local.default_tags
+  tags = var.tags
 }

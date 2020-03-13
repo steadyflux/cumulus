@@ -3,7 +3,7 @@
 'use strict';
 
 const program = require('commander');
-const { lambda } = require('@cumulus/common/aws');
+const { lambda } = require('@cumulus/aws-client/services');
 const pckg = require('../package.json');
 const backup = require('./backup');
 const restore = require('./restore');
@@ -71,9 +71,11 @@ program
 
 program
   .command('serve')
+  .option('--stackName <stackName>', 'stackname to serve (defaults to "localrun")', undefined)
+  .option('--no-reseed', 'do not reseed dynamoDB and Elasticsearch with new data on start.')
   .description('Serves the local version of the Cumulus API')
-  .action(() => {
-    serveApi(process.env.USERNAME).catch(console.error);
+  .action((cmd) => {
+    serveApi(process.env.USERNAME, cmd.stackName, cmd.reseed).catch(console.error);
   });
 
 program

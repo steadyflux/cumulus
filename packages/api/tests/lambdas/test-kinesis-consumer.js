@@ -5,13 +5,15 @@ const sinon = require('sinon');
 const test = require('ava');
 
 const { randomString } = require('@cumulus/common/test-utils');
-const { SQS } = require('@cumulus/ingest/aws');
-const { s3, recursivelyDeleteS3Bucket, sns } = require('@cumulus/common/aws');
+const SQS = require('@cumulus/aws-client/SQS');
+const { s3, sns } = require('@cumulus/aws-client/services');
+const { recursivelyDeleteS3Bucket } = require('@cumulus/aws-client/S3');
 const { getRules, handler } = require('../../lambdas/message-consumer');
 const Collection = require('../../models/collections');
 const Rule = require('../../models/rules');
 const Provider = require('../../models/providers');
 const testCollectionName = 'test-collection';
+
 const snsClient = sns();
 
 const eventData = JSON.stringify({
@@ -53,10 +55,11 @@ const rule1Params = {
 };
 
 // if the state is not provided, it will be set to default value 'ENABLED'
-const rule2Params = Object.assign({}, commonRuleParams, {
+const rule2Params = {
+  ...commonRuleParams,
   name: 'testRule2',
   workflow: 'test-workflow-2'
-});
+};
 
 const disabledRuleParams = {
   name: 'disabledRule',
@@ -74,7 +77,7 @@ const stubQueueUrl = 'stubQueueUrl';
 
 allRuleTypesParams.forEach((ruleTypeParams) => {
   allOtherRulesParams.forEach((otherRulesParams) => {
-    const ruleParams = Object.assign({}, commonRuleParams, ruleTypeParams, otherRulesParams);
+    const ruleParams = { ...commonRuleParams, ...ruleTypeParams, ...otherRulesParams };
     rulesToCreate.push(ruleParams);
   });
 });
@@ -121,7 +124,7 @@ test.before(async () => {
 });
 
 test.beforeEach(async (t) => {
-  sfSchedulerSpy = sinon.stub(SQS, 'sendMessage').returns(true);
+  sfSchedulerSpy = sinon.stub(SQS, 'sendSQSMessage').returns(true);
   t.context.publishResponse = {
     ResponseMetadata: { RequestId: randomString() },
     MessageId: randomString()

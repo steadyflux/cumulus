@@ -11,8 +11,8 @@ const {
   waitForTestExecutionStart
 } = require('@cumulus/integration-tests');
 
-const { sns, lambda } = require('@cumulus/common/aws');
-const { LambdaStep } = require('@cumulus/common/sfnStep');
+const { sns, lambda } = require('@cumulus/aws-client/services');
+const { LambdaStep } = require('@cumulus/integration-tests/sfnStep');
 
 const {
   createTestSuffix,

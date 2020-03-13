@@ -1,14 +1,23 @@
 'use strict';
 
 const fs = require('fs');
-const { randomString, randomId } = require('@cumulus/common/test-utils');
-const { sqs } = require('@cumulus/common/aws');
+const path = require('path');
+const { randomId } = require('@cumulus/common/test-utils');
+const { sqs } = require('@cumulus/aws-client/services');
+const { putJsonS3Object } = require('@cumulus/aws-client/S3');
+
 const { createJwtToken } = require('./token');
+const { authorizedOAuthUsersKey } = require('../app/auth');
 
 const isLocalApi = () => process.env.CUMULUS_ENV === 'local';
 
-const dataDir = 'app/data';
-const getWorkflowList = () => fs.readdirSync(dataDir).map((f) => JSON.parse(fs.readFileSync(`${dataDir}/${f}`).toString()));
+const dataDir = path.join(__dirname, '../app/data');
+const workflowDir = path.join(dataDir, 'workflows');
+const getWorkflowList = () => fs.readdirSync(workflowDir).map((f) => JSON.parse(fs.readFileSync(`${workflowDir}/${f}`).toString()));
+
+const reconcileDir = path.join(dataDir, 'reconciliation-reports');
+const getReconcileReportsList = () => fs.readdirSync(reconcileDir).map((f) => JSON.parse(fs.readFileSync(`${reconcileDir}/${f}`).toString()));
+
 
 /**
  * mocks the context object of the lambda function with
@@ -35,7 +44,7 @@ function fakeFileFactory(params = {}) {
   const fileName = randomId('name');
 
   return {
-    bucket: randomString(),
+    bucket: randomId('bucket'),
     fileName,
     key: fileName,
     ...params
@@ -55,12 +64,13 @@ function fakeGranuleFactory(status = 'completed') {
     version: randomId('vers'),
     collectionId: 'fakeCollection___v1',
     status,
-    execution: randomString(),
+    execution: randomId('execution'),
     createdAt: Date.now(),
     updatedAt: Date.now(),
     published: true,
     cmrLink: 'example.com',
-    productVolume: 100
+    productVolume: 100,
+    duration: 0
   };
 }
 
@@ -85,11 +95,11 @@ function fakeGranuleFactoryV2(options = {}) {
  */
 function fakeRuleFactoryV2(params = {}) {
   const rule = {
-    name: randomString(),
-    workflow: randomString(),
-    provider: randomString(),
+    name: randomId('name'),
+    workflow: randomId('workflow'),
+    provider: randomId('provider'),
     collection: {
-      name: randomString(),
+      name: randomId('colName'),
       version: '0.0.0'
     },
     rule: {
@@ -153,11 +163,11 @@ function fakePdrFactoryV2(params = {}) {
  */
 function fakeExecutionFactoryV2(params = {}) {
   const execution = {
-    arn: randomString(),
+    arn: randomId('arn'),
     duration: 180.5,
-    name: randomString(),
-    execution: randomString(),
-    parentArn: randomString(),
+    name: randomId('name'),
+    execution: randomId('execution'),
+    parentArn: randomId('parentArn'),
     error: { test: 'error' },
     status: 'completed',
     createdAt: Date.now() - 180.5 * 1000,
@@ -184,25 +194,24 @@ function fakeExecutionFactory(status = 'completed', type = 'fakeWorkflow') {
 }
 
 /**
- * Build a user that can be authenticated against
+ * creates fake async operation records
  *
- * @param {Object} params - params
- * @param {string} params.userName - a username
- *   Defaults to a random string
- * @param {string} params.password - a password
- *   Defaults to a random string
- * @param {integer} params.expires - an expiration time for the token
- *   Defaults to one hour from now
- * @returns {Object} - a fake user
+ * @param {Object} params - overrides
+ * @returns {Object} fake async operation object
  */
-function fakeUserFactory(params = {}) {
-  const user = {
-    userName: randomId('userName'),
-    password: randomId('password'),
-    expires: Date.now() + (60 * 60 * 1000) // Default to 1 hour
+function fakeAsyncOperationFactory(params = {}) {
+  const asyncOperation = {
+    taskArn: randomId('arn'),
+    id: randomId('id'),
+    description: randomId('description'),
+    operationType: 'ES Index',
+    status: 'SUCCEEDED',
+    createdAt: Date.now() - 180.5 * 1000,
+    updatedAt: Date.now(),
+    output: randomId('output')
   };
 
-  return { ...user, ...params };
+  return { ...asyncOperation, ...params };
 }
 
 /**
@@ -212,20 +221,17 @@ function fakeUserFactory(params = {}) {
  * @returns {Object} fake collection object
  */
 function fakeCollectionFactory(options = {}) {
-  return Object.assign(
-    {
-      name: randomString(),
-      dataType: randomString(),
-      version: '0.0.0',
-      provider_path: '',
-      duplicateHandling: 'replace',
-      granuleId: '^MOD09GQ\\.A[\\d]{7}\\.[\\S]{6}\\.006\\.[\\d]{13}$',
-      granuleIdExtraction: '(MOD09GQ\\.(.*))\\.hdf',
-      sampleFileName: 'MOD09GQ.A2017025.h21v00.006.2017034065104.hdf',
-      files: []
-    },
-    options
-  );
+  return {
+    name: randomId('collectionName'),
+    version: '0.0.0',
+    provider_path: '',
+    duplicateHandling: 'replace',
+    granuleId: '^MOD09GQ\\.A[\\d]{7}\\.[\\S]{6}\\.006\\.[\\d]{13}$',
+    granuleIdExtraction: '(MOD09GQ\\.(.*))\\.hdf',
+    sampleFileName: 'MOD09GQ.A2017025.h21v00.006.2017034065104.hdf',
+    files: [],
+    ...options
+  };
 }
 
 /**
@@ -235,16 +241,14 @@ function fakeCollectionFactory(options = {}) {
  * @returns {Object} fake provider object
  */
 function fakeProviderFactory(options = {}) {
-  return Object.assign(
-    {
-      id: randomString(),
-      globalConnectionLimit: 1,
-      protocol: 'http',
-      host: randomString(),
-      port: 80
-    },
-    options
-  );
+  return {
+    id: randomId('id'),
+    globalConnectionLimit: 1,
+    protocol: 'http',
+    host: randomId('host'),
+    port: 80,
+    ...options
+  };
 }
 
 function fakeAccessTokenFactory(params = {}) {
@@ -257,10 +261,10 @@ function fakeAccessTokenFactory(params = {}) {
   };
 }
 
-async function createFakeJwtAuthToken({ accessTokenModel, userModel }) {
-  const userRecord = fakeUserFactory();
-  await userModel.create(userRecord);
+const setAuthorizedOAuthUsers = (users) =>
+  putJsonS3Object(process.env.system_bucket, authorizedOAuthUsersKey(), users);
 
+async function createFakeJwtAuthToken({ accessTokenModel, username }) {
   const {
     accessToken,
     refreshToken,
@@ -268,7 +272,7 @@ async function createFakeJwtAuthToken({ accessTokenModel, userModel }) {
   } = fakeAccessTokenFactory();
   await accessTokenModel.create({ accessToken, refreshToken });
 
-  return createJwtToken({ accessToken, expirationTime, username: userRecord.userName });
+  return createJwtToken({ accessToken, expirationTime, username });
 }
 
 /**
@@ -347,13 +351,15 @@ module.exports = {
   fakeCollectionFactory,
   fakeExecutionFactory,
   fakeExecutionFactoryV2,
+  fakeAsyncOperationFactory,
   fakeRuleFactory,
   fakeRuleFactoryV2,
   fakeFileFactory,
-  fakeUserFactory,
   fakeProviderFactory,
+  getReconcileReportsList,
   getSqsQueueMessageCounts,
   getWorkflowList,
   isLocalApi,
-  testEndpoint
+  testEndpoint,
+  setAuthorizedOAuthUsers
 };

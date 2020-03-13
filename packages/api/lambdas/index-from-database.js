@@ -2,9 +2,7 @@
 
 const log = require('@cumulus/common/log');
 
-const {
-  DynamoDbSearchQueue
-} = require('@cumulus/common/aws');
+const DynamoDbSearchQueue = require('@cumulus/aws-client/DynamoDbSearchQueue');
 
 const { Search } = require('../es/search');
 const indexer = require('../es/indexer');
@@ -42,6 +40,7 @@ async function indexFromDatabase(esIndex, tables, esHost) {
   await Promise.all([
     indexModel(esClient, tables.collectionsTable, esIndex, indexer.indexCollection),
     indexModel(esClient, tables.executionsTable, esIndex, indexer.indexExecution),
+    indexModel(esClient, tables.asyncOperationsTable, esIndex, indexer.indexAsyncOperation),
     indexModel(esClient, tables.granulesTable, esIndex, indexer.indexGranule),
     indexModel(esClient, tables.pdrsTable, esIndex, indexer.indexPdr),
     indexModel(esClient, tables.providersTable, esIndex, indexer.indexProvider),

@@ -5,7 +5,7 @@ module "publish_granule_workflow" {
   name            = "PublishGranule"
   workflow_config = module.cumulus.workflow_config
   system_bucket   = var.system_bucket
-  tags            = local.default_tags
+  tags            = local.tags
 
   state_machine_definition = <<JSON
 {
@@ -23,8 +23,7 @@ module "publish_granule_workflow" {
             "bucket": "{$.meta.buckets.internal.name}",
             "stack": "{$.meta.stack}",
             "cmr": "{$.meta.cmr}",
-            "launchpad": "{$.meta.launchpad}",
-            "process": "N/A"
+            "launchpad": "{$.meta.launchpad}"
           }
         }
       },

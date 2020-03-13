@@ -1,7 +1,9 @@
+# CMR password
+
 resource "aws_secretsmanager_secret" "message_template_cmr_password" {
   name_prefix = "${var.prefix}-message-template-cmr-password"
   description = "CMR password for the Cumulus message template in the ${var.prefix} deployment"
-  tags        = local.default_tags
+  tags        = var.tags
 }
 
 resource "aws_secretsmanager_secret_version" "message_template_cmr_password" {
@@ -10,10 +12,27 @@ resource "aws_secretsmanager_secret_version" "message_template_cmr_password" {
   secret_string = var.cmr_password
 }
 
+# Launchpad passphrase
+
+resource "aws_secretsmanager_secret" "message_template_launchpad_passphrase" {
+  name_prefix = "${var.prefix}-message-template-launchpad-passphrase"
+  description = "Launchpad passphrase for the Cumulus message template in the ${var.prefix} deployment"
+  tags        = var.tags
+}
+
+resource "aws_secretsmanager_secret_version" "message_template_launchpad_passphrase" {
+  count         = length(var.launchpad_passphrase) == 0 ? 0 : 1
+  secret_id     = aws_secretsmanager_secret.message_template_launchpad_passphrase.id
+  secret_string = var.launchpad_passphrase
+}
+
 data "aws_iam_policy_document" "lambda_processing_role_get_secrets" {
   statement {
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.message_template_cmr_password.arn]
+    resources = [
+      aws_secretsmanager_secret.message_template_cmr_password.arn,
+      aws_secretsmanager_secret.message_template_launchpad_passphrase.arn
+    ]
   }
 }
 
@@ -24,11 +43,12 @@ resource "aws_iam_role_policy" "lambda_processing_role_get_secrets" {
 
 locals {
   default_queues = {
-    triggerLambdaFailure      = aws_sqs_queue.trigger_lambda_failure.id
-    startSF                   = aws_sqs_queue.start_sf.id
     backgroundProcessing      = aws_sqs_queue.background_processing.id
     kinesisFailure            = aws_sqs_queue.kinesis_failure.id
+    reporting                 = var.sf_event_sqs_to_db_records_sqs_queue_url
+    startSF                   = aws_sqs_queue.start_sf.id
     ScheduleSFDeadLetterQueue = aws_sqs_queue.schedule_sf_dead_letter_queue.id
+    triggerLambdaFailure      = aws_sqs_queue.trigger_lambda_failure.id
   }
   custom_queues = { for queue in var.custom_queues: queue.id => queue.url }
   custom_throttled_queues = { for queue in var.throttled_queues: queue.id => queue.url }
@@ -58,7 +78,7 @@ locals {
         username           = var.cmr_username
         provider           = var.cmr_provider
         clientId           = var.cmr_client_id
-        passwordSecretName = length(var.cmr_password) == 0 ? null : aws_secretsmanager_secret.message_template_cmr_password.name
+        passwordSecretName = length(var.cmr_password) == 0 ? "" : aws_secretsmanager_secret.message_template_cmr_password.name
         cmrEnvironment     = var.cmr_environment
         cmrLimit           = var.cmr_limit
         cmrPageSize        = var.cmr_page_size
@@ -66,7 +86,7 @@ locals {
       launchpad = {
         api         = var.launchpad_api
         certificate = var.launchpad_certificate
-        passphrase  = var.launchpad_passphrase
+        passphraseSecretName = length(var.launchpad_passphrase) == 0 ? "" : aws_secretsmanager_secret.message_template_launchpad_passphrase.name
       }
       distribution_endpoint = var.distribution_url
       collection            = {}

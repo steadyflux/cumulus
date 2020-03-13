@@ -1,12 +1,12 @@
 resource "aws_cloudwatch_log_group" "async_operation" {
   name = "${var.prefix}-AsyncOperationEcsLogs"
   retention_in_days = 30
-  tags = local.default_tags
+  tags = var.tags
 }
 
 resource "aws_ecs_task_definition" "async_operation" {
   family                = "${var.prefix}-AsyncOperationTaskDefinition"
-  tags                  = local.default_tags
+  tags                  = var.tags
   container_definitions = <<EOS
 [
   {
@@ -31,12 +31,4 @@ resource "aws_ecs_task_definition" "async_operation" {
   }
 ]
 EOS
-}
-
-resource "aws_cloudwatch_log_subscription_filter" "async_operation_ecs_log" {
-  name            = "${var.prefix}-AsyncOperationEcsLogSubscription"
-  destination_arn = aws_lambda_function.log2elasticsearch.arn
-  log_group_name  = aws_cloudwatch_log_group.async_operation.name
-  filter_pattern  = ""
-  distribution    = "ByLogStream"
 }

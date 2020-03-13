@@ -1,15 +1,14 @@
 'use strict';
 
-const {
-  aws: { s3 },
-  stringUtils: { globalReplace }
-} = require('@cumulus/common');
+const { s3 } = require('@cumulus/aws-client/services');
+const { globalReplace } = require('@cumulus/common/string');
+const { getWorkflowArn } = require('@cumulus/common/workflows');
 const { Execution } = require('@cumulus/api/models');
 const fs = require('fs');
 
 jasmine.DEFAULT_TIMEOUT_INTERVAL = 9 * 60 * 1000;
 
-const { LambdaStep } = require('@cumulus/common/sfnStep');
+const { LambdaStep } = require('@cumulus/integration-tests/sfnStep');
 const {
   getEventSourceMapping,
   addRules,
@@ -18,9 +17,10 @@ const {
   cleanupProviders,
   addCollections,
   cleanupCollections,
-  rulesList,
+  readJsonFilesFromDir,
   deleteRules,
-  granulesApi: granulesApiTestUtils
+  granulesApi: granulesApiTestUtils,
+  setProcessEnvironment
 } = require('@cumulus/integration-tests');
 const { randomString } = require('@cumulus/common/test-utils');
 
@@ -44,7 +44,7 @@ const {
   putRecordOnStream,
   tryCatchExit,
   waitForActiveStream,
-  waitForTestSf
+  waitForTestSfForRecord
 } = require('../../helpers/kinesisHelpers');
 
 const testWorkflow = 'KinesisTriggerTest';
@@ -53,7 +53,7 @@ const testWorkflow = 'KinesisTriggerTest';
 // configured to trigger workflows when new records arrive on a Kinesis
 // stream. When a record appears on the stream, the messageConsumer lambda
 // triggers workflows associated with the kinesis-type rules.
-xdescribe('The Cloud Notification Mechanism Kinesis workflow', () => {
+describe('The Cloud Notification Mechanism Kinesis workflow', () => {
   const collectionsDir = './data/collections/L2_HR_PIXC-000/';
   const maxWaitForExecutionSecs = 60 * 5;
   const maxWaitForSFExistSecs = 60 * 4;
@@ -81,12 +81,14 @@ xdescribe('The Cloud Notification Mechanism Kinesis workflow', () => {
   let testConfig;
   let testDataFolder;
   let testSuffix;
+  let workflowArn;
   let workflowExecution;
 
   async function cleanUp() {
+    setProcessEnvironment(testConfig.stackName, testConfig.bucket);
     // delete rule
     console.log(`\nDeleting ${ruleOverride.name}`);
-    const rules = await rulesList(testConfig.stackName, testConfig.bucket, ruleDirectory);
+    const rules = await readJsonFilesFromDir(ruleDirectory);
     // clean up stack state added by test
     console.log(`\nCleaning up stack & deleting test streams '${streamName}' and '${cnmResponseStreamName}'`);
     await deleteRules(testConfig.stackName, testConfig.bucket, rules, ruleSuffix);
@@ -115,6 +117,8 @@ xdescribe('The Cloud Notification Mechanism Kinesis workflow', () => {
     testDataFolder = createTestDataPath(testId);
     ruleSuffix = globalReplace(testSuffix, '-', '_');
 
+    workflowArn = await getWorkflowArn(testConfig.stackName, testConfig.bucket, testWorkflow);
+
     record = JSON.parse(fs.readFileSync(`${__dirname}/data/records/L2_HR_PIXC_product_0001-of-4154.json`));
 
     record.product.files[0].uri = globalReplace(record.product.files[0].uri, 'cumulus-test-data/pdrs', testDataFolder);
@@ -129,13 +133,6 @@ xdescribe('The Cloud Notification Mechanism Kinesis workflow', () => {
 
     recordFile = record.product.files[0];
     expectedTranslatePayload = {
-      cnm: {
-        product: record.product,
-        identifier: recordIdentifier,
-        bucket: record.bucket,
-        provider: record.provider,
-        collection: record.collection
-      },
       granules: [
         {
           granuleId: record.product.name,
@@ -146,7 +143,9 @@ xdescribe('The Cloud Notification Mechanism Kinesis workflow', () => {
               bucket: record.bucket,
               path: testDataFolder,
               url_path: recordFile.uri,
-              size: recordFile.size
+              size: recordFile.size,
+              checksumType: recordFile.checksumType,
+              checksum: recordFile.checksum
             }
           ]
         }
@@ -240,7 +239,7 @@ xdescribe('The Cloud Notification Mechanism Kinesis workflow', () => {
         await putRecordOnStream(streamName, record);
 
         console.log('Waiting for step function to start...');
-        workflowExecution = await waitForTestSf(recordIdentifier, testWorkflow, maxWaitForSFExistSecs, 'CNMToCMA');
+        workflowExecution = await waitForTestSfForRecord(recordIdentifier, workflowArn, maxWaitForSFExistSecs);
 
         console.log(`Waiting for completed execution of ${workflowExecution.executionArn}`);
         executionStatus = await waitForCompletedExecution(workflowExecution.executionArn, maxWaitForExecutionSecs);
@@ -259,6 +258,20 @@ xdescribe('The Cloud Notification Mechanism Kinesis workflow', () => {
 
       it('outputs the expectedTranslatePayload object', () => {
         expect(lambdaOutput.payload).toEqual(expectedTranslatePayload);
+      });
+
+      it('maps the CNM object correctly', () => {
+        delete lambdaOutput.meta.cnm.receivedTime;
+
+        expect(lambdaOutput.meta.cnm).toEqual({
+          deliveryTime: record.deliveryTime,
+          ingestTime: record.ingestTime,
+          product: record.product,
+          identifier: recordIdentifier,
+          bucket: record.bucket,
+          provider: record.provider,
+          collection: record.collection
+        });
       });
     });
 
@@ -320,9 +333,14 @@ xdescribe('The Cloud Notification Mechanism Kinesis workflow', () => {
 
       it('outputs the expected object', () => {
         const actualPayload = lambdaOutput.payload;
+
+        // Remove fields that are dynamically generated by the tasks
         delete actualPayload.processCompleteTime;
+        delete actualPayload.receivedTime;
 
         expect(actualPayload).toEqual({
+          deliveryTime: record.deliveryTime,
+          ingestTime: record.ingestTime,
           productSize: recordFile.size,
           bucket: record.bucket,
           collection: record.collection,
@@ -347,19 +365,23 @@ xdescribe('The Cloud Notification Mechanism Kinesis workflow', () => {
   });
 
   describe('Workflow fails because TranslateMessage fails', () => {
-    const badRecord = { ...record };
-    const badRecordIdentifier = randomString();
-    badRecord.identifier = badRecordIdentifier;
-    delete badRecord.product;
     let failingWorkflowExecution;
 
     beforeAll(async () => {
+      const badRecord = { ...record };
+      const badRecordIdentifier = randomString();
+      badRecord.identifier = badRecordIdentifier;
+      // Need to delete a property that will cause TranslateMessage to fail,
+      // but not CnmResponseFail so that a failure message is still written
+      // to the response stream
+      delete badRecord.product.name;
+
       await tryCatchExit(cleanUp, async () => {
         console.log(`Dropping bad record onto ${streamName}, recordIdentifier: ${badRecordIdentifier}.`);
         await putRecordOnStream(streamName, badRecord);
 
         console.log('Waiting for step function to start...');
-        failingWorkflowExecution = await waitForTestSf(badRecordIdentifier, testWorkflow, maxWaitForSFExistSecs, 'CNMToCMA');
+        failingWorkflowExecution = await waitForTestSfForRecord(badRecordIdentifier, workflowArn, maxWaitForSFExistSecs);
 
         console.log(`Waiting for completed execution of ${failingWorkflowExecution.executionArn}.`);
         executionStatus = await waitForCompletedExecution(failingWorkflowExecution.executionArn, maxWaitForExecutionSecs);
@@ -374,17 +396,17 @@ xdescribe('The Cloud Notification Mechanism Kinesis workflow', () => {
       expect(executionStatus).toEqual('FAILED');
     });
 
+    it('outputs the record', async () => {
+      const lambdaOutput = await lambdaStep.getStepOutput(failingWorkflowExecution.executionArn, 'CNMToCMA', 'failure');
+      expect(lambdaOutput.error).toEqual('cumulus_message_adapter.message_parser.MessageAdapterException');
+      expect(lambdaOutput.cause).toMatch(/.+An error occurred in the Cumulus Message Adapter: .+/);
+      expect(lambdaOutput.cause).not.toMatch(/.+process hasn't exited.+/);
+    });
+
     it('sends the error to the CnmResponse task', async () => {
       const CnmResponseInput = await lambdaStep.getStepInput(failingWorkflowExecution.executionArn, 'CnmResponse');
       expect(CnmResponseInput.exception.Error).toEqual('cumulus_message_adapter.message_parser.MessageAdapterException');
       expect(JSON.parse(CnmResponseInput.exception.Cause).errorMessage).toMatch(/An error occurred in the Cumulus Message Adapter: .+/);
-    });
-
-    it('outputs the record', async () => {
-      const lambdaOutput = await lambdaStep.getStepOutput(failingWorkflowExecution.executionArn, 'CnmResponse', 'failure');
-      expect(lambdaOutput.error).toEqual('cumulus_message_adapter.message_parser.MessageAdapterException');
-      expect(lambdaOutput.cause).toMatch(/.+An error occurred in the Cumulus Message Adapter: .+/);
-      expect(lambdaOutput.cause).not.toMatch(/.+process hasn't exited.+/);
     });
 
     it('writes a failure message to the response stream', async () => {

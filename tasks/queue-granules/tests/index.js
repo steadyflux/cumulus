@@ -3,13 +3,12 @@
 const test = require('ava');
 
 const {
-  createQueue,
-  getExecutionArn,
   s3,
-  s3PutObject,
-  sqs,
-  recursivelyDeleteS3Bucket
-} = require('@cumulus/common/aws');
+  sqs
+} = require('@cumulus/aws-client/services');
+const { createQueue } = require('@cumulus/aws-client/SQS');
+const { recursivelyDeleteS3Bucket, s3PutObject } = require('@cumulus/aws-client/S3');
+const { getExecutionArn } = require('@cumulus/aws-client/StepFunctions');
 const {
   randomId,
   randomNumber,
@@ -18,7 +17,7 @@ const {
   validateInput,
   validateOutput
 } = require('@cumulus/common/test-utils');
-const { CollectionConfigStore } = require('@cumulus/common');
+const { CollectionConfigStore } = require('@cumulus/common/collection-config-store');
 
 const { queueGranules } = require('..');
 
@@ -36,7 +35,7 @@ test.beforeEach(async (t) => {
 
   const queueName = randomId('queue');
   t.context.queueName = queueName;
-  const queueUrl = await createQueue();
+  const queueUrl = await createQueue(randomString());
 
   t.context.queues = {
     [queueName]: queueUrl
@@ -103,10 +102,10 @@ test.serial('The correct output is returned when granules are queued without a P
   const { event } = t.context;
   event.input.granules = [
     {
-      dataType: dataType, version: version, granuleId: randomString(), files: []
+      dataType, version, granuleId: randomString(), files: []
     },
     {
-      dataType: dataType, version: version, granuleId: randomString(), files: []
+      dataType, version, granuleId: randomString(), files: []
     }
   ];
 
@@ -129,10 +128,10 @@ test.serial('The correct output is returned when granules are queued with a PDR'
   const { event } = t.context;
   event.input.granules = [
     {
-      dataType: dataType, version: version, granuleId: randomString(), files: []
+      dataType, version, granuleId: randomString(), files: []
     },
     {
-      dataType: dataType, version: version, granuleId: randomString(), files: []
+      dataType, version, granuleId: randomString(), files: []
     }
   ];
   event.input.pdr = { name: randomString(), path: randomString() };
@@ -174,10 +173,10 @@ test.serial('Granules are added to the queue', async (t) => {
   const { event } = t.context;
   event.input.granules = [
     {
-      dataType: dataType, version: version, granuleId: randomString(), files: []
+      dataType, version, granuleId: randomString(), files: []
     },
     {
-      dataType: dataType, version: version, granuleId: randomString(), files: []
+      dataType, version, granuleId: randomString(), files: []
     }
   ];
 

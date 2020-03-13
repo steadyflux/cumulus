@@ -1,9 +1,8 @@
 'use strict';
 
-const {
-  stringUtils: { globalReplace }
-} = require('@cumulus/common');
-const { LambdaStep } = require('@cumulus/common/sfnStep');
+const { LambdaStep } = require('@cumulus/integration-tests/sfnStep');
+const { globalReplace } = require('@cumulus/common/string');
+const { getWorkflowArn } = require('@cumulus/common/workflows');
 const { Rule } = require('@cumulus/api/models');
 
 jasmine.DEFAULT_TIMEOUT_INTERVAL = 9 * 60 * 1000;
@@ -14,8 +13,9 @@ const {
   cleanupProviders,
   addCollections,
   cleanupCollections,
-  rulesList,
-  deleteRules
+  readJsonFilesFromDir,
+  deleteRules,
+  setProcessEnvironment
 } = require('@cumulus/integration-tests');
 const { randomString } = require('@cumulus/common/test-utils');
 
@@ -35,7 +35,7 @@ const {
   putRecordOnStream,
   tryCatchExit,
   waitForActiveStream,
-  waitForAllTestSf
+  waitForAllTestSfForRecord
 } = require('../../helpers/kinesisHelpers');
 
 const ruleDirectory = './spec/parallel/kinesisTests/data/lambdaEventSourceTestRules';
@@ -61,8 +61,9 @@ describe('When adding multiple rules that share a kinesis event stream', () => {
   let testSuffix;
 
   async function cleanUp() {
+    setProcessEnvironment(testConfig.stackName, testConfig.bucket);
     // delete rules
-    const rulesToDelete = await rulesList(testConfig.stackName, testConfig.bucket, ruleDirectory);
+    const rulesToDelete = await readJsonFilesFromDir(ruleDirectory);
     // clean up stack state added by test
     console.log(`\nCleaning up stack & deleting test stream '${streamName}'`);
     await deleteRules(testConfig.stackName, testConfig.bucket, rulesToDelete, ruleSuffix);
@@ -133,13 +134,13 @@ describe('When adding multiple rules that share a kinesis event stream', () => {
         console.log(`Dropping record onto ${streamName}, recordIdentifier: ${recordIdentifier}.`);
         await putRecordOnStream(streamName, record);
 
+        const workflowArn = await getWorkflowArn(testConfig.stackName, testConfig.bucket, rules[1].workflow);
         console.log('Waiting for step function to start...');
-        workflowExecutions = await waitForAllTestSf(
+        workflowExecutions = await waitForAllTestSfForRecord(
           recordIdentifier,
-          rules[1].workflow,
+          workflowArn,
           maxWaitForSFExistSecs,
-          2,
-          'HelloWorld'
+          2
         );
       });
     });

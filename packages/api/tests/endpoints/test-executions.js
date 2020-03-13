@@ -2,14 +2,18 @@
 
 const test = require('ava');
 const request = require('supertest');
-const aws = require('@cumulus/common/aws');
+const awsServices = require('@cumulus/aws-client/services');
+const {
+  recursivelyDeleteS3Bucket
+} = require('@cumulus/aws-client/S3');
 const { randomString } = require('@cumulus/common/test-utils');
 const models = require('../../models');
 const bootstrap = require('../../lambdas/bootstrap');
 const indexer = require('../../es/indexer');
 const {
   createFakeJwtAuthToken,
-  fakeExecutionFactory
+  fakeExecutionFactory,
+  setAuthorizedOAuthUsers
 } = require('../../lib/testUtils');
 const { Search } = require('../../es/search');
 const assertions = require('../../lib/assertions');
@@ -20,7 +24,6 @@ let esIndex;
 const fakeExecutions = [];
 process.env.AccessTokensTable = randomString();
 process.env.ExecutionsTable = randomString();
-process.env.UsersTable = randomString();
 process.env.stackName = randomString();
 process.env.system_bucket = randomString();
 process.env.TOKEN_SECRET = randomString();
@@ -31,7 +34,6 @@ const { app } = require('../../app');
 let jwtAuthToken;
 let accessTokenModel;
 let executionModel;
-let userModel;
 
 test.before(async () => {
   esIndex = randomString();
@@ -45,7 +47,7 @@ test.before(async () => {
   await bootstrap.bootstrapElasticSearch('fakehost', esIndex, esAlias);
 
   // create a fake bucket
-  await aws.s3().createBucket({ Bucket: process.env.system_bucket }).promise();
+  await awsServices.s3().createBucket({ Bucket: process.env.system_bucket }).promise();
 
   // create fake execution table
   executionModel = new models.Execution();
@@ -57,21 +59,20 @@ test.before(async () => {
   await Promise.all(fakeExecutions.map((i) => executionModel.create(i)
     .then((record) => indexer.indexExecution(esClient, record, esAlias))));
 
-  userModel = new models.User();
-  await userModel.createTable();
+  const username = randomString();
+  await setAuthorizedOAuthUsers([username]);
 
   accessTokenModel = new models.AccessToken();
   await accessTokenModel.createTable();
 
-  jwtAuthToken = await createFakeJwtAuthToken({ accessTokenModel, userModel });
+  jwtAuthToken = await createFakeJwtAuthToken({ accessTokenModel, username });
 });
 
 test.after.always(async () => {
   await accessTokenModel.deleteTable();
   await executionModel.deleteTable();
-  await userModel.deleteTable();
   await esClient.indices.delete({ index: esIndex });
-  await aws.recursivelyDeleteS3Bucket(process.env.system_bucket);
+  await recursivelyDeleteS3Bucket(process.env.system_bucket);
 });
 
 test('CUMULUS-911 GET without pathParameters and without an Authorization header returns an Authorization Missing response', async (t) => {

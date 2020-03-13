@@ -1,6 +1,6 @@
 {
   "name": "@cumulus/sync-granule",
-  "version": "1.16.1",
+  "version": "1.19.0",
   "description": "Download a given granule",
   "main": "index.js",
   "directories": {
@@ -27,7 +27,11 @@
   "author": "Cumulus Authors",
   "license": "Apache-2.0",
   "ava": {
-    "serial": true
+    "serial": true,
+    "verbose": true,
+    "files": [
+      "!tests/fixtures/**/*"
+    ]
   },
   "nyc": {
     "exclude": [
@@ -35,18 +39,23 @@
     ]
   },
   "dependencies": {
-    "@cumulus/common": "1.16.1",
+    "@cumulus/aws-client": "1.19.0",
+    "@cumulus/common": "1.19.0",
     "@cumulus/cumulus-message-adapter-js": "^1.1.0",
-    "@cumulus/ingest": "1.16.1",
-    "p-map": "^2.1.0"
+    "@cumulus/errors": "1.19.0",
+    "@cumulus/ingest": "1.19.0",
+    "lodash.flatten": "^4.4.0",
+    "p-map": "^2.1.0",
+    "uuid": "^3.4.0"
   },
   "devDependencies": {
-    "@cumulus/test-data": "1.16.1",
+    "@cumulus/test-data": "1.19.0",
     "ava": "^2.1.0",
     "babel-loader": "^8.0.6",
     "babel-plugin-source-map-support": "^2.1.1",
     "babel-preset-env": "^1.7.0",
     "lodash.set": "^4.3.2",
+    "moment": "^2.24.0",
     "nyc": "^14.0.0",
     "webpack": "~4.5.0",
     "webpack-cli": "~2.0.14"

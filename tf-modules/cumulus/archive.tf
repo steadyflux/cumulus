@@ -3,6 +3,10 @@ module "archive" {
 
   prefix = var.prefix
 
+  api_url = var.archive_api_url
+
+  deploy_to_ngap = var.deploy_to_ngap
+
   permissions_boundary_arn = var.permissions_boundary_arn
 
   lambda_processing_role_arn = aws_iam_role.lambda_processing.arn
@@ -45,7 +49,7 @@ module "archive" {
   saml_entity_id                  = var.saml_entity_id
   saml_assertion_consumer_service = var.saml_assertion_consumer_service
   saml_idp_login                  = var.saml_idp_login
-  saml_launchpad_metadata_path    = var.saml_launchpad_metadata_path
+  saml_launchpad_metadata_url     = var.saml_launchpad_metadata_url
 
   urs_url             = var.urs_url
   urs_client_id       = var.urs_client_id
@@ -100,4 +104,8 @@ module "archive" {
 
   oauth_provider   = var.oauth_provider
   oauth_user_group = var.oauth_user_group
+
+  log_destination_arn = var.log_destination_arn
+
+  tags = var.tags
 }

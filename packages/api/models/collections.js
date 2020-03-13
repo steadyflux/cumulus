@@ -1,6 +1,8 @@
 'use strict';
 
-const { CollectionConfigStore } = require('@cumulus/common');
+const { CollectionConfigStore } = require('@cumulus/common/collection-config-store');
+const { publishSnsMessage } = require('@cumulus/aws-client/SNS');
+const log = require('@cumulus/common/log');
 const Manager = require('./base');
 const { collection: collectionSchema } = require('./schemas');
 const Rule = require('./rules');
@@ -11,6 +13,25 @@ function checkRegex(regex, sampleFileName) {
   const match = validation.test(sampleFileName);
 
   if (!match) throw new BadRequestError(`regex ${regex} cannot validate ${sampleFileName}`);
+}
+
+/**
+ * Publish SNS message for Collection reporting.
+ *
+ * @param {Object} collectionRecord - A Collection record with event type
+ * @returns {Promise<undefined>}
+ */
+async function publishCollectionSnsMessage(collectionRecord) {
+  try {
+    const collectionSnsTopicArn = process.env.collection_sns_topic_arn;
+    await publishSnsMessage(collectionSnsTopicArn, collectionRecord);
+  } catch (err) {
+    log.warn(
+      `Failed to create record for collection ${collectionRecord.record.name} ${collectionRecord.record.version}: ${err.message}`,
+      'Cause: ', err,
+      'Collection record: ', collectionRecord
+    );
+  }
 }
 
 class Collection extends Manager {
@@ -79,11 +100,10 @@ class Collection extends Manager {
   /**
    * Creates the specified collection and puts it into the collection
    * configuration store that was specified during this model's construction.
-   * Uses the specified item's `dataType` (if specified, otherwise, it's `name`)
-   * and `version` as the key for putting the item in the config store.
+   * Uses the specified item's `name` and `version` as the key for putting the
+   * item in the config store.
    *
    * @param {Object} item - the collection configuration
-   * @param {string} [item.dataType] - the collection's data type
    * @param {string} item.name - the collection name
    * @param {string} item.version - the collection version
    * @returns {Promise<Object>} the created record
@@ -92,10 +112,17 @@ class Collection extends Manager {
    * @see CollectionConfigStore#put
    */
   async create(item) {
-    const { dataType, name, version } = item;
-    await this.collectionConfigStore.put(dataType || name, version, item);
+    const { name, version } = item;
+    await this.collectionConfigStore.put(name, version, item);
 
-    return super.create(item);
+    const collectionRecord = await super.create(item);
+    const publishRecord = {
+      event: 'Create',
+      record: collectionRecord
+    };
+    await publishCollectionSnsMessage(publishRecord);
+
+    return collectionRecord;
   }
 
   /**
@@ -105,10 +132,6 @@ class Collection extends Manager {
    * the collection has associated rules.
    *
    * @param {Object} item - collection parameters
-   * @param {string} [item.dataType] - the collection data type; if not
-   *    specified, the collection is retrieved in order to determine its data
-   *    type, and if there is no data type, the name is used instead when
-   *    deleting the collection from the collection store
    * @param {string} item.name - the collection name
    * @param {string} item.version - the collection version
    * @returns {Promise<Object>} promise that resolves to the de-serialized data
@@ -131,15 +154,17 @@ class Collection extends Manager {
       );
     }
 
-    // Since the `create` method uses the collection's `dataType` when calling
-    // `CollectionConfigStore.put`, we must also use `dataType` to delete it
-    // from the store.  However, we may only have the collection's name and
-    // version, so in that case we need to retrieve the full collection object
-    // in order to retrieve its `dataType`.  If the item does not exist, then
-    // fall back to using the specified name.
-    const { dataType } = item.dataType
-      ? item : await this.get(item).catch(() => item);
-    await this.collectionConfigStore.delete(dataType || name, version);
+    await this.collectionConfigStore.delete(name, version);
+
+    const record = {
+      event: 'Delete',
+      deletedAt: Date.now(),
+      record: {
+        name,
+        version
+      }
+    };
+    await publishCollectionSnsMessage(record);
 
     return super.delete({ name, version });
   }

@@ -10,6 +10,7 @@ declare -a param_list=(
   "bamboo_KES_DEPLOYMENT"
   "bamboo_METRICS_ES_HOST"
   "bamboo_METRICS_ES_USER"
+  "bamboo_NGAP_ENV"
   "bamboo_PUBLISH_FLAG"
   "bamboo_REPORT_BUILD_STATUS"
   "bamboo_SECRET_AWS_ACCESS_KEY_ID"
@@ -35,6 +36,7 @@ declare -a param_list=(
   "bamboo_SECRET_TOKEN_SECRET"
   "bamboo_SECRET_VPC_CIDR_IP"
   "bamboo_SECRET_VPC_ID"
+  "bamboo_USE_CACHED_BOOTSTRAP"
   "bamboo_SHARED_LOG_DESTINATION_ARN"
   "bamboo_SKIP_AUDIT"
   "bamboo_SKIP_INTEGRATION_TESTS"
@@ -110,6 +112,7 @@ if [[ $bamboo_NGAP_ENV = "SIT" ]]; then
   export TFSTATE_BUCKET=$bamboo_SIT_TFSTATE_BUCKET
   export TFSTATE_LOCK_TABLE=$bamboo_SIT_TFSTATE_LOCK_TABLE
   export SHARED_LOG_DESTINATION_ARN=$bamboo_SIT_SHARED_LOG_DESTINATION_ARN
+  export TF_VAR_distribution_url=$bamboo_SIT_TEA_CLOUDFRONT_URL
   DEPLOYMENT=$bamboo_SIT_DEPLOYMENT
 fi
 
@@ -182,4 +185,10 @@ if [[ $KES_DEPLOYMENT == true ]]; then
     echo "Setting RUN_REDEPLOYMENT to true"
     echo export RUN_REDEPLOYMENT="true" >> .bamboo_env_vars
   fi
+fi
+
+if [[ $USE_CACHED_BOOTSTRAP == true ]]; then
+  export UNIT_TEST_BUILD_DIR=/cumulus
+else
+  export UNIT_TEST_BUILD_DIR=/source/cumulus
 fi

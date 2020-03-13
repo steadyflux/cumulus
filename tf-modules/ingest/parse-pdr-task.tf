@@ -25,19 +25,11 @@ module "parse_pdr_task" {
 
   enable_versioning = var.enable_task_versioning
 
-  tags = merge(local.default_tags, { Project = var.prefix })
+  tags = var.tags
 }
 
 resource "aws_cloudwatch_log_group" "parse_pdr_task" {
   name              = "/aws/lambda/${module.parse_pdr_task.lambda_function_name}"
   retention_in_days = 30
-  tags              = local.default_tags
-}
-
-resource "aws_cloudwatch_log_subscription_filter" "parse_pdr_task" {
-  name            = "${var.prefix}-ParsePdrLogSubscription"
-  destination_arn = var.log2elasticsearch_lambda_function_arn
-  log_group_name  = aws_cloudwatch_log_group.parse_pdr_task.name
-  filter_pattern  = ""
-  distribution    = "ByLogStream"
+  tags              = var.tags
 }

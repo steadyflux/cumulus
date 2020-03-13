@@ -3,7 +3,7 @@ resource "aws_sqs_queue" "db_indexer_dead_letter_queue" {
   receive_wait_time_seconds  = 20
   message_retention_seconds  = 1209600
   visibility_timeout_seconds = 60
-  tags                       = local.default_tags
+  tags                       = var.tags
 }
 
 resource "aws_lambda_function" "db_indexer" {
@@ -20,18 +20,28 @@ resource "aws_lambda_function" "db_indexer" {
   }
   environment {
     variables = {
-      CMR_ENVIRONMENT = var.cmr_environment
-      FilesTable      = var.dynamo_tables.files.name
-      ES_HOST         = var.elasticsearch_hostname
-      stackName       = var.prefix
-      system_bucket   = var.system_bucket
+      CMR_ENVIRONMENT       = var.cmr_environment
+      CollectionsTable      = var.dynamo_tables.collections.name
+      ExecutionsTable       = var.dynamo_tables.executions.name
+      AsyncOperationsTable  = var.dynamo_tables.async_operations.name
+      FilesTable            = var.dynamo_tables.files.name
+      GranulesTable         = var.dynamo_tables.granules.name
+      PdrsTable             = var.dynamo_tables.pdrs.name
+      ProvidersTable        = var.dynamo_tables.providers.name
+      RulesTable            = var.dynamo_tables.rules.name
+      ES_HOST               = var.elasticsearch_hostname
+      stackName             = var.prefix
+      system_bucket         = var.system_bucket
     }
   }
-  tags = merge(local.default_tags, { Project = var.prefix })
+  tags = var.tags
 
-  vpc_config {
-    subnet_ids         = var.lambda_subnet_ids
-    security_group_ids = var.lambda_subnet_ids == null ? null : [aws_security_group.no_ingress_all_egress[0].id, var.elasticsearch_security_group_id]
+  dynamic "vpc_config" {
+    for_each = length(var.lambda_subnet_ids) == 0 ? [] : [1]
+    content {
+      subnet_ids = var.lambda_subnet_ids
+      security_group_ids = local.lambda_security_group_ids
+    }
   }
 }
 
@@ -52,6 +62,17 @@ data "aws_dynamodb_table" "executions" {
 
 resource "aws_lambda_event_source_mapping" "executions_table_db_indexer" {
   event_source_arn  = data.aws_dynamodb_table.executions.stream_arn
+  function_name     = aws_lambda_function.db_indexer.arn
+  starting_position = "TRIM_HORIZON"
+  batch_size        = 10
+}
+
+data "aws_dynamodb_table" "async_operations" {
+  name = var.dynamo_tables.async_operations.name
+}
+
+resource "aws_lambda_event_source_mapping" "async_operations_table_db_indexer" {
+  event_source_arn  = data.aws_dynamodb_table.async_operations.stream_arn
   function_name     = aws_lambda_function.db_indexer.arn
   starting_position = "TRIM_HORIZON"
   batch_size        = 10

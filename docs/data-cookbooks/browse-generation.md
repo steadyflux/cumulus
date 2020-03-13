@@ -98,7 +98,6 @@ A few things to note about tasks in the workflow being added:
           "stack": "{$.meta.stack}",
           "cmr": "{$.meta.cmr}",
           "launchpad": "{$.meta.launchpad}",
-          "process": "{$.meta.process}",
           "input_granules": "{$.meta.input_granules}",
           "granuleIdExtraction": "{$.meta.collection.granuleIdExtraction}"
         }
@@ -282,7 +281,6 @@ Navigate to the 'Collection' tab on the interface and add a collection. Note tha
 {
   "name": "MOD09GQ",
   "version": "006",
-  "dataType": "MOD09GQ",
   "process": "modis",
   "provider_path": "{{path_to_data}}",
   "url_path": "{cmrMetadata.Granule.Collection.ShortName}___{cmrMetadata.Granule.Collection.VersionId}/{substring(file.name, 0, 3)}",

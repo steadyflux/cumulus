@@ -36,17 +36,15 @@ module "ingest" {
   # Launchpad config
   launchpad_api         = var.launchpad_api
   launchpad_certificate = var.launchpad_certificate
-  launchpad_passphrase  = module.archive.encrypted_launchpad_passphrase
+  launchpad_passphrase  = var.launchpad_passphrase
 
   # DB config
   dynamo_tables = var.dynamo_tables
 
-  log2elasticsearch_lambda_function_arn = module.archive.log2elasticsearch_lambda_function_arn
-
   custom_queues = var.custom_queues
   throttled_queues = var.throttled_queues
 
-  report_executions_sns_topic_arn = module.archive.report_executions_sns_topic_arn
-  report_granules_sns_topic_arn   = module.archive.report_granules_sns_topic_arn
-  report_pdrs_sns_topic_arn       = module.archive.report_pdrs_sns_topic_arn
+  sf_event_sqs_to_db_records_sqs_queue_url = module.archive.sf_event_sqs_to_db_records_sqs_queue_url
+
+  tags = var.tags
 }

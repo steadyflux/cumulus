@@ -35,7 +35,7 @@ resource "aws_elasticsearch_domain" "es" {
     prevent_destroy = true
   }
 
-  tags = local.default_tags
+  tags = var.tags
 }
 
 data "aws_iam_policy_document" "es_access_policy" {
@@ -84,7 +84,7 @@ resource "aws_security_group" "es_vpc" {
     self      = true
   }
 
-  tags = local.default_tags
+  tags = var.tags
 }
 
 resource "aws_elasticsearch_domain" "es_vpc" {
@@ -110,14 +110,17 @@ resource "aws_elasticsearch_domain" "es_vpc" {
 
   vpc_options {
     subnet_ids         = var.subnet_ids
-    security_group_ids = [aws_security_group.es_vpc[0].id]
+    security_group_ids = flatten([
+      aws_security_group.es_vpc[0].id,
+      var.elasticsearch_security_group_ids,
+    ])
   }
 
   snapshot_options {
     automated_snapshot_start_hour = 0
   }
 
-  tags = local.default_tags
+  tags = var.tags
 }
 
 resource "aws_elasticsearch_domain_policy" "es_vpc_domain_policy" {
@@ -142,6 +145,7 @@ JSON
 }
 
 resource "aws_cloudwatch_metric_alarm" "es_nodes_low" {
+  count               = var.include_elasticsearch ? 1 : 0
   alarm_name          = "${local.es_domain_name}-NodesLowAlarm"
   comparison_operator = "LessThanThreshold"
   namespace           = "AWS/ES"
@@ -151,10 +155,12 @@ resource "aws_cloudwatch_metric_alarm" "es_nodes_low" {
   statistic           = "Average"
   threshold           = var.elasticsearch_config.instance_count
   alarm_description   = "There are less instances running than the desired"
-  tags                = local.default_tags
+
+  tags = var.tags
 }
 
 resource "aws_cloudwatch_metric_alarm" "es_nodes_high" {
+  count               = var.include_elasticsearch ? 1 : 0
   alarm_name          = "${local.es_domain_name}-NodesHighAlarm"
   comparison_operator = "GreaterThanThreshold"
   namespace           = "AWS/ES"
@@ -164,4 +170,6 @@ resource "aws_cloudwatch_metric_alarm" "es_nodes_high" {
   statistic           = "Average"
   threshold           = var.elasticsearch_config.instance_count
   alarm_description   = "There are less instances running than the desired"
+
+  tags = var.tags
 }

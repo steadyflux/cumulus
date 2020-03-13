@@ -3,13 +3,13 @@
 const get = require('lodash.get');
 const pLimit = require('p-limit');
 
+const StepFunctions = require('@cumulus/aws-client/StepFunctions');
 const {
   getCollectionIdFromMessage,
   getMessageExecutionArn,
   getMessageExecutionName
 } = require('@cumulus/common/message');
 const { isNil, removeNilProperties } = require('@cumulus/common/util');
-const aws = require('@cumulus/ingest/aws');
 
 const executionSchema = require('./schemas').execution;
 const Manager = require('./base');
@@ -46,7 +46,7 @@ class Execution extends Manager {
       arn,
       asyncOperationId: get(cumulusMessage, 'cumulus_meta.asyncOperationId'),
       parentArn: get(cumulusMessage, 'cumulus_meta.parentExecutionArn'),
-      execution: aws.getExecutionUrl(arn),
+      execution: StepFunctions.getExecutionUrl(arn),
       tasks: get(cumulusMessage, 'meta.workflow_tasks'),
       error: parseException(cumulusMessage.exception),
       type: get(cumulusMessage, 'meta.workflow_name'),
@@ -115,43 +115,38 @@ class Execution extends Manager {
     return Promise.all(executions.Items.map((execution) => super.delete({ arn: execution.arn })));
   }
 
-  buildDocClientUpdateParams(item) {
-    const ExpressionAttributeNames = {};
-    const ExpressionAttributeValues = {};
-    const setUpdateExpressions = [];
-
-    Object.entries(item).forEach(([key, value]) => {
-      if (key === 'arn') return;
-      if (value === undefined) return;
-
-      ExpressionAttributeNames[`#${key}`] = key;
-      ExpressionAttributeValues[`:${key}`] = value;
-
-      if (item.status === 'running') {
-        if (['createdAt', 'updatedAt', 'timestamp', 'originalPayload'].includes(key)) {
-          setUpdateExpressions.push(`#${key} = :${key}`);
-        } else {
-          setUpdateExpressions.push(`#${key} = if_not_exists(#${key}, :${key})`);
-        }
-      } else {
-        setUpdateExpressions.push(`#${key} = :${key}`);
-      }
-    });
-
-    if (setUpdateExpressions.length === 0) return null;
-
-    return {
-      TableName: this.tableName,
-      Key: { arn: item.arn },
-      ExpressionAttributeNames,
-      ExpressionAttributeValues,
-      UpdateExpression: `SET ${setUpdateExpressions.join(', ')}`
-    };
+  /**
+   * Get the set of fields which are mutable based on the execution status.
+   *
+   * @param {Object} record - An execution record
+   * @returns {Array} - The array of mutable field names
+   */
+  _getMutableFieldNames(record) {
+    if (record.status === 'running') {
+      return ['createdAt', 'updatedAt', 'timestamp', 'originalPayload'];
+    }
+    return Object.keys(record);
   }
 
+  /**
+   * Generate and store an execution record from a Cumulus message.
+   *
+   * @param {Object} cumulusMessage - Cumulus workflow message
+   * @returns {Promise}
+   */
   async storeExecutionFromCumulusMessage(cumulusMessage) {
     const executionItem = Execution.generateRecord(cumulusMessage);
-    const updateParams = this.buildDocClientUpdateParams(executionItem);
+
+    // TODO: Refactor this all to use model.update() to avoid having to manually call
+    // schema validation and the actual client.update() method.
+    await this.constructor.recordIsValid(executionItem, this.schema, this.removeAdditional);
+
+    const mutableFieldNames = this._getMutableFieldNames(executionItem);
+    const updateParams = this._buildDocClientUpdateParams({
+      item: executionItem,
+      itemKey: { arn: executionItem.arn },
+      mutableFieldNames
+    });
 
     await this.dynamodbDocClient.update(updateParams).promise();
   }

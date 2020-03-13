@@ -24,8 +24,7 @@ resource "aws_iam_role" "lambda_processing" {
   name                 = "${var.prefix}-lambda-processing"
   assume_role_policy   = data.aws_iam_policy_document.lambda_assume_role_policy.json
   permissions_boundary = var.permissions_boundary_arn
-  # TODO Re-enable once IAM permissions have been fixed
-  # tags                 = local.default_tags
+  tags                 = var.tags
 }
 
 data "aws_iam_policy_document" "lambda_processing_policy" {
@@ -136,6 +135,11 @@ data "aws_iam_policy_document" "lambda_processing_policy" {
       "sqs:GetQueueAttributes",
     ]
     resources = ["arn:aws:sqs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*"]
+  }
+
+  statement {
+    actions   = ["kms:Decrypt"]
+    resources = [module.archive.provider_kms_key_arn]
   }
 }
 

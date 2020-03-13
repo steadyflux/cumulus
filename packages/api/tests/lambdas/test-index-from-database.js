@@ -2,7 +2,11 @@
 
 const test = require('ava');
 
-const aws = require('@cumulus/common/aws');
+const awsServices = require('@cumulus/aws-client/services');
+const {
+  promiseS3Upload,
+  recursivelyDeleteS3Bucket
+} = require('@cumulus/aws-client/S3');
 const { randomString } = require('@cumulus/common/test-utils');
 
 const indexFromDatabase = require('../../lambdas/index-from-database');
@@ -10,6 +14,7 @@ const indexFromDatabase = require('../../lambdas/index-from-database');
 const models = require('../../models');
 const {
   fakeCollectionFactory,
+  fakeAsyncOperationFactory,
   fakeExecutionFactoryV2,
   fakeGranuleFactoryV2,
   fakePdrFactoryV2,
@@ -27,6 +32,7 @@ process.env.system_bucket = randomString();
 process.env.stackName = randomString();
 
 process.env.ExecutionsTable = randomString();
+process.env.AsyncOperationsTable = randomString();
 process.env.CollectionsTable = randomString();
 process.env.GranulesTable = randomString();
 process.env.PdrsTable = randomString();
@@ -36,6 +42,7 @@ process.env.RulesTable = randomString();
 const tables = {
   collectionsTable: process.env.CollectionsTable,
   executionsTable: process.env.ExecutionsTable,
+  asyncOperationsTable: process.env.AsyncOperationsTable,
   granulesTable: process.env.GranulesTable,
   pdrsTable: process.env.PdrsTable,
   providersTable: process.env.ProvidersTable,
@@ -43,6 +50,11 @@ const tables = {
 };
 
 const executionModel = new models.Execution();
+const asyncOperationModel = new models.AsyncOperation({
+  systemBucket: process.env.system_bucket,
+  stackName: process.env.stackName,
+  tableName: process.env.AsyncOperationsTable
+});
 const collectionModel = new models.Collection();
 const granuleModel = new models.Granule();
 const pdrModel = new models.Pdr();
@@ -77,9 +89,10 @@ test.before(async (t) => {
   // add fake elasticsearch index
   await bootstrap.bootstrapElasticSearch('fakehost', t.context.esIndex, t.context.esAlias);
 
-  await aws.s3().createBucket({ Bucket: process.env.system_bucket }).promise();
+  await awsServices.s3().createBucket({ Bucket: process.env.system_bucket }).promise();
 
   await executionModel.createTable();
+  await asyncOperationModel.createTable();
   await collectionModel.createTable();
   await granuleModel.createTable();
   await pdrModel.createTable();
@@ -89,12 +102,12 @@ test.before(async (t) => {
   const wKey = `${process.env.stackName}/workflows/${workflowList[0].name}.json`;
   const tKey = `${process.env.stackName}/workflow_template.json`;
   await Promise.all([
-    aws.promiseS3Upload({
+    promiseS3Upload({
       Bucket: process.env.system_bucket,
       Key: wKey,
       Body: JSON.stringify(workflowList[0])
     }),
-    aws.promiseS3Upload({
+    promiseS3Upload({
       Bucket: process.env.system_bucket,
       Key: tKey,
       Body: JSON.stringify({})
@@ -108,13 +121,14 @@ test.after.always(async (t) => {
   await esClient.indices.delete({ index: esIndex });
 
   await executionModel.deleteTable();
+  await asyncOperationModel.deleteTable();
   await collectionModel.deleteTable();
   await granuleModel.deleteTable();
   await pdrModel.deleteTable();
   await providersModel.deleteTable();
   await rulesModel.deleteTable();
 
-  await aws.recursivelyDeleteS3Bucket(process.env.system_bucket);
+  await recursivelyDeleteS3Bucket(process.env.system_bucket);
 });
 
 test('No error is thrown if nothing is in the database', async (t) => {
@@ -131,6 +145,7 @@ test('index executions', async (t) => {
   const fakeData = await Promise.all([
     addFakeData(numItems, fakeCollectionFactory, collectionModel),
     addFakeData(numItems, fakeExecutionFactoryV2, executionModel),
+    addFakeData(numItems, fakeAsyncOperationFactory, asyncOperationModel),
     addFakeData(numItems, fakeGranuleFactoryV2, granuleModel),
     addFakeData(numItems, fakePdrFactoryV2, pdrModel),
     addFakeData(numItems, fakeProviderFactory, providersModel),

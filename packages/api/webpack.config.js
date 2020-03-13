@@ -14,7 +14,7 @@ module.exports = {
     bulkOperation: './lambdas/bulk-operation.js',
     cleanExecutions: './lambdas/cleanExecutions.js',
     createReconciliationReport: './lambdas/create-reconciliation-report.js',
-    cwSfExecutionEventToDb: './lambdas/cw-sf-execution-event-to-db.js',
+    sfEventSqsToDbRecords: './lambdas/sf-event-sqs-to-db-records.js',
     dbIndexer: './lambdas/db-indexer.js',
     distribution: './app/distribution.js',
     emsDistributionReport: './lambdas/ems-distribution-report.js',
@@ -26,15 +26,16 @@ module.exports = {
     manualConsumer: './lambdas/manual-consumer.js',
     messageConsumer: './lambdas/message-consumer.js',
     payloadLogger: './lambdas/payload-logger.js',
+    providerSecretsMigration: './lambdas/providerSecretsMigration.js',
     publishExecutions: './lambdas/publish-executions.js',
-    publishReports: './lambdas/publish-reports.js',
-    reportGranules: './lambdas/report-granules.js',
-    reportPdrs: './lambdas/report-pdrs.js',
+    publishGranules: './lambdas/publish-granules.js',
+    publishPdrs: './lambdas/publish-pdrs.js',
     sfScheduler: './lambdas/sf-scheduler.js',
     sfSemaphoreDown: './lambdas/sf-semaphore-down.js',
     sfStarter: './lambdas/sf-starter.js',
     sqsMessageConsumer: './lambdas/sqs-message-consumer.js',
-    sqsMessageRemover: './lambdas/sqs-message-remover.js'
+    sqsMessageRemover: './lambdas/sqs-message-remover.js',
+    verifyProviderSecretsMigration: './lambdas/verifyProviderSecretsMigration.js'
   },
   devtool: 'inline-source-map',
   resolve: {
@@ -54,7 +55,7 @@ module.exports = {
     libraryTarget: 'commonjs2',
     filename: '[name]/index.js',
     devtoolModuleFilenameTemplate: (info) => {
-      const relativePath = path.relative(root, info.absoluteResourcePath)
+      const relativePath = path.relative(root, info.absoluteResourcePath);
       return `webpack://${relativePath}`;
     }
   },

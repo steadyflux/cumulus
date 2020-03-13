@@ -2,20 +2,24 @@
 
 const test = require('ava');
 const request = require('supertest');
+const { s3 } = require('@cumulus/aws-client/services');
+const {
+  recursivelyDeleteS3Bucket
+} = require('@cumulus/aws-client/S3');
 const { randomString } = require('@cumulus/common/test-utils');
-const { RecordDoesNotExist } = require('@cumulus/common/errors');
+const { RecordDoesNotExist } = require('@cumulus/errors');
 
 const bootstrap = require('../../../lambdas/bootstrap');
 const models = require('../../../models');
 const {
   createFakeJwtAuthToken,
-  fakeProviderFactory
+  fakeProviderFactory,
+  setAuthorizedOAuthUsers
 } = require('../../../lib/testUtils');
 const { Search } = require('../../../es/search');
 const assertions = require('../../../lib/assertions');
 
 process.env.AccessTokensTable = randomString();
-process.env.UsersTable = randomString();
 process.env.ProvidersTable = randomString();
 process.env.stackName = randomString();
 process.env.system_bucket = randomString();
@@ -30,7 +34,6 @@ let esClient;
 
 let jwtAuthToken;
 let accessTokenModel;
-let userModel;
 
 const providerDoesNotExist = async (t, providerId) => {
   await t.throwsAsync(
@@ -40,6 +43,8 @@ const providerDoesNotExist = async (t, providerId) => {
 };
 
 test.before(async () => {
+  await s3().createBucket({ Bucket: process.env.system_bucket }).promise();
+
   const esAlias = randomString();
   process.env.ES_INDEX = esAlias;
   await bootstrap.bootstrapElasticSearch('fakehost', esIndex, esAlias);
@@ -47,13 +52,13 @@ test.before(async () => {
   providerModel = new models.Provider();
   await providerModel.createTable();
 
-  userModel = new models.User();
-  await userModel.createTable();
+  const username = randomString();
+  await setAuthorizedOAuthUsers([username]);
 
   accessTokenModel = new models.AccessToken();
   await accessTokenModel.createTable();
 
-  jwtAuthToken = await createFakeJwtAuthToken({ accessTokenModel, userModel });
+  jwtAuthToken = await createFakeJwtAuthToken({ accessTokenModel, username });
 
   esClient = await Search.es('fakehost');
 });
@@ -64,9 +69,9 @@ test.beforeEach(async (t) => {
 });
 
 test.after.always(async () => {
+  await recursivelyDeleteS3Bucket(process.env.system_bucket);
   await providerModel.deleteTable();
   await accessTokenModel.deleteTable();
-  await userModel.deleteTable();
   await esClient.indices.delete({ index: esIndex });
 });
 
@@ -114,7 +119,7 @@ test('POST with invalid authorization scheme returns an invalid authorization re
 
 test('POST creates a new provider', async (t) => {
   const newProviderId = 'AQUA';
-  const newProvider = Object.assign({}, t.context.testProvider, { id: newProviderId });
+  const newProvider = { ...t.context.testProvider, id: newProviderId };
 
   const response = await request(app)
     .post('/providers')

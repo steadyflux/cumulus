@@ -25,5 +25,5 @@ module "files_to_granules_task" {
 
   enable_versioning = var.enable_task_versioning
 
-  tags = merge(local.default_tags, { Project = var.prefix })
+  tags = var.tags
 }

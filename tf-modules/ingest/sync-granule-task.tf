@@ -26,19 +26,11 @@ module "sync_granule_task" {
 
   enable_versioning = var.enable_task_versioning
 
-  tags = merge(local.default_tags, { Project = var.prefix })
+  tags = var.tags
 }
 
 resource "aws_cloudwatch_log_group" "sync_granule_task" {
   name = "/aws/lambda/${module.sync_granule_task.lambda_function_name}"
   retention_in_days = 30
-  tags = local.default_tags
-}
-
-resource "aws_cloudwatch_log_subscription_filter" "sync_granule_task" {
-  name            = "${var.prefix}-SyncGranuleSubscription"
-  destination_arn = var.log2elasticsearch_lambda_function_arn
-  filter_pattern  = ""
-  log_group_name  = aws_cloudwatch_log_group.sync_granule_task.name
-  distribution    = "ByLogStream"
+  tags = var.tags
 }

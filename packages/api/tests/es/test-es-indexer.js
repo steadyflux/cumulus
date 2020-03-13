@@ -5,11 +5,12 @@ const sinon = require('sinon');
 const rewire = require('rewire');
 const fs = require('fs');
 const path = require('path');
-const aws = require('@cumulus/common/aws');
+const awsServices = require('@cumulus/aws-client/services');
+const s3Utils = require('@cumulus/aws-client/S3');
+const StepFunctions = require('@cumulus/aws-client/StepFunctions');
 const cmrjs = require('@cumulus/cmrjs');
 const { randomString } = require('@cumulus/common/test-utils');
 const { constructCollectionId } = require('@cumulus/common/collection-config-store');
-const StepFunctions = require('@cumulus/common/StepFunctions');
 const workflows = require('@cumulus/common/workflows');
 
 const indexer = rewire('../../es/indexer');
@@ -42,7 +43,6 @@ let workflowStub;
 let templateStub;
 
 const input = JSON.stringify(granuleSuccess);
-const payload = JSON.parse(input);
 
 test.before(async (t) => {
   // create the tables
@@ -70,7 +70,7 @@ test.before(async (t) => {
   esClient = await Search.es();
 
   // create buckets
-  await aws.s3().createBucket({ Bucket: process.env.system_bucket }).promise();
+  await awsServices.s3().createBucket({ Bucket: process.env.system_bucket }).promise();
 
   const fakeMetadata = {
     beginningDateTime: '2017-10-24T00:00:00.000Z',
@@ -87,7 +87,7 @@ test.before(async (t) => {
     stopDate: new Date(Date.UTC(2019, 6, 28, 1))
   });
 
-  existsStub = sinon.stub(aws, 'fileExists').returns(true);
+  existsStub = sinon.stub(s3Utils, 'fileExists').returns(true);
   templateStub = sinon.stub(workflows, 'getWorkflowTemplate').returns({});
   workflowStub = sinon.stub(workflows, 'getWorkflowFile').returns({});
 });
@@ -99,7 +99,7 @@ test.after.always(async () => {
   await pdrsModel.deleteTable();
 
   await esClient.indices.delete({ index: esIndex });
-  await aws.recursivelyDeleteS3Bucket(process.env.system_bucket);
+  await s3Utils.recursivelyDeleteS3Bucket(process.env.system_bucket);
 
   cmrStub.restore();
   stepFunctionsStub.restore();
@@ -419,9 +419,9 @@ test.serial('delete a provider record', async (t) => {
 
 // This needs to be serial because it is stubbing aws.sfn's responses
 test.serial('reingest a granule', async (t) => {
-  payload.payload.granules[0].granuleId = randomString();
-  const records = await granuleModel.createGranulesFromSns(payload);
-  const record = records[0];
+  const record = fakeGranuleFactory();
+
+  await granuleModel.create(record);
 
   t.is(record.status, 'completed');
 
@@ -436,26 +436,16 @@ test.serial('reingest a granule', async (t) => {
 test.serial('indexing a granule record', async (t) => {
   const { esAlias } = t.context;
 
-  const txt = fs.readFileSync(
-    path.join(__dirname, '../data/sns_message_granule.txt'),
-    'utf8'
-  );
+  const granule = fakeGranuleFactory();
 
-  const event = JSON.parse(JSON.parse(txt.toString()));
-  const msg = JSON.parse(event.Records[0].Sns.Message);
-
-  const [granule] = await granuleModel.createGranulesFromSns(msg);
   await indexer.indexGranule(esClient, granule, esAlias);
-
-  const collection = msg.meta.collection;
-  const collectionId = constructCollectionId(collection.name, collection.version);
 
   // test granule record is added
   const record = await esClient.get({
     index: esAlias,
     type: 'granule',
     id: granule.granuleId,
-    parent: collectionId
+    parent: granule.collectionId
   }).then((response) => response.body);
   t.is(record._id, granule.granuleId);
 });
@@ -471,7 +461,7 @@ test.serial('indexing a PDR record', async (t) => {
   const event = JSON.parse(JSON.parse(txt.toString()));
   const msg = JSON.parse(event.Records[0].Sns.Message);
 
-  const pdr = await pdrsModel.createPdrFromSns(msg);
+  const pdr = await pdrsModel.generatePdrRecord(msg);
 
   // fake pdr index to elasticsearch (this is done in a lambda function)
   await indexer.indexPdr(esClient, pdr, esAlias);

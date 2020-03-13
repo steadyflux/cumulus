@@ -78,11 +78,17 @@ variable "privileged" {
 variable "tags" {
   description = "Tags to apply to deployed resources"
   type    = map(string)
-  default = null
+  default = {}
 }
 
 variable "volumes" {
   description = "Volumes to make accessible to the container(s)"
   type    = list(object({ name = string, host_path = string, container_path = string }))
   default = []
+}
+
+variable "log_destination_arn" {
+  type        = string
+  default     = null
+  description = "A shared AWS:Log:Destination that receives logs in log_groups"
 }

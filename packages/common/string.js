@@ -12,8 +12,9 @@
 
 const compose = require('lodash.flowright');
 const curry = require('lodash.curry');
+const isString = require('lodash.isstring');
 
-const { isNull, negate } = require('./util');
+const { deprecate, isNull, negate } = require('./util');
 
 /**
  * Given a character, replaces the JS unicode-escape sequence for the character
@@ -36,7 +37,10 @@ const unicodeEscapeCharacter = (char) =>
  *
  * @static
  */
-const unicodeEscape = (str, regex = /[\s\S]/g) => str.replace(regex, unicodeEscapeCharacter);
+const unicodeEscape = (str, regex = /[\s\S]/g) => {
+  deprecate('@cumulus/common/string/unicodeEscape', '1.17.0', '@cumulus/aws-client/StepFunctions/unicodeEscape');
+  return str.replace(regex, unicodeEscapeCharacter);
+};
 
 /**
  * Return a new string with some or all matches of a pattern replaced by a
@@ -151,8 +155,20 @@ const hostnameRegex = /^[a-z0-9][a-z0-9\.\-]*$/;
  */
 const isValidHostname = compose(matches(hostnameRegex), toLower);
 
+/**
+ * Test if a value is a string with a length greater than zero
+ *
+ * @param {string} x - the string to test
+ * @returns {boolean}
+ *
+ * @static
+ * @kind function
+ */
+const isNonEmptyString = (x) => isString(x) && x.length > 0;
+
 module.exports = {
   globalReplace,
+  isNonEmptyString,
   isValidHostname,
   match,
   matches,

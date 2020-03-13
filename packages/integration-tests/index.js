@@ -3,35 +3,34 @@
 'use strict';
 
 const orderBy = require('lodash.orderby');
+const path = require('path');
 const cloneDeep = require('lodash.clonedeep');
+const isEqual = require('lodash.isequal');
+const isString = require('lodash.isstring');
 const merge = require('lodash.merge');
 const Handlebars = require('handlebars');
 const uuidv4 = require('uuid/v4');
 const fs = require('fs-extra');
-const pLimit = require('p-limit');
 const pWaitFor = require('p-wait-for');
 const pMap = require('p-map');
-
-const { getWorkflowTemplate, getWorkflowArn } = require('@cumulus/common/workflows');
-const { pullStepFunctionEvent } = require('@cumulus/common/aws');
-const { constructCollectionId } = require('@cumulus/common/collection-config-store');
-const { ActivityStep, LambdaStep } = require('@cumulus/common/sfnStep');
-const { globalReplace } = require('@cumulus/common/string');
+const moment = require('moment');
 
 const {
   dynamodb,
   ecs,
   sfn
-} = require('@cumulus/common/aws');
-const StepFunctions = require('@cumulus/common/StepFunctions');
-
-const { sleep } = require('@cumulus/common/util');
-
-const {
-  models: { Provider, Collection, Rule }
-} = require('@cumulus/api');
+} = require('@cumulus/aws-client/services');
+const StepFunctions = require('@cumulus/aws-client/StepFunctions');
+const { getWorkflowTemplate, getWorkflowArn } = require('@cumulus/common/workflows');
+const { readJsonFile } = require('@cumulus/common/FileUtils');
+const { globalReplace } = require('@cumulus/common/string');
+const { deprecate, sleep } = require('@cumulus/common/util');
+const ProvidersModel = require('@cumulus/api/models/providers');
+const RulesModel = require('@cumulus/api/models/rules');
 
 const api = require('./api/api');
+const collectionsApi = require('./api/collections');
+const providersApi = require('./api/providers');
 const rulesApi = require('./api/rules');
 const emsApi = require('./api/ems');
 const executionsApi = require('./api/executions');
@@ -41,6 +40,7 @@ const distributionApi = require('./api/distribution');
 const cmr = require('./cmr.js');
 const lambda = require('./lambda');
 const waitForDeployment = require('./lambdas/waitForDeployment');
+const { ActivityStep, LambdaStep } = require('./sfnStep');
 
 const waitPeriodMs = 1000;
 
@@ -102,6 +102,27 @@ async function getClusterArn(stackName) {
   return matchingArns[0];
 }
 
+async function getExecutionInput(executionArn) {
+  const { input } = await StepFunctions.describeExecution({ executionArn });
+  return input;
+}
+
+/**
+ * Fetch the output of a given execution
+ *
+ * @param {string} executionArn
+ * @returns {Promise<Object>} the output of the execution
+ */
+const getExecutionOutput = (executionArn) =>
+  StepFunctions.describeExecution({ executionArn })
+    .then((execution) => execution.output)
+    .then(JSON.parse)
+    .then(StepFunctions.pullStepFunctionEvent);
+
+async function getExecutionInputObject(executionArn) {
+  return JSON.parse(await getExecutionInput(executionArn));
+}
+
 /**
  * Get the status of a given execution
  *
@@ -156,6 +177,7 @@ async function waitForCompletedExecution(executionArn, timeout = 600) {
 async function startWorkflowExecution(workflowArn, workflowMsg) {
   // Give this execution a unique name
   workflowMsg.cumulus_meta.execution_name = uuidv4();
+  workflowMsg.cumulus_meta.workflow_start_time = Date.now();
   workflowMsg.cumulus_meta.state_machine = workflowArn;
 
   const workflowParams = {
@@ -248,8 +270,18 @@ function setProcessEnvironment(stackName, bucketName) {
   process.env.RulesTable = `${stackName}-RulesTable`;
 }
 
-const concurrencyLimit = process.env.CONCURRENCY || 3;
-const limit = pLimit(concurrencyLimit);
+/**
+ * Load and parse all of the JSON files from a directory
+ *
+ * @param {string} sourceDir - the directory containing the JSON files to load
+ * @returns {Promise<Array<*>>} the parsed JSON files
+ */
+const readJsonFilesFromDir = async (sourceDir) => {
+  const allFiles = await fs.readdir(sourceDir);
+  const jsonFiles = allFiles.filter((f) => f.endsWith('.json'));
+  const absoluteFiles = jsonFiles.map((f) => path.join(sourceDir, f));
+  return Promise.all(absoluteFiles.map(readJsonFile));
+};
 
 /**
  * Set environment variables and read in seed files from dataDirectory
@@ -257,37 +289,105 @@ const limit = pLimit(concurrencyLimit);
  * @param {string} stackName - Cloud formation stack name
  * @param {string} bucketName - S3 internal bucket name
  * @param {string} dataDirectory - the directory of collection json files
- * @returns {Array} List of objects to seed in the database
+ * @returns {Promise<Array>} List of objects to seed in the database
  */
-async function setupSeedData(stackName, bucketName, dataDirectory) {
+function setupSeedData(stackName, bucketName, dataDirectory) {
   setProcessEnvironment(stackName, bucketName);
-  const filenames = await fs.readdir(dataDirectory);
-  const seedItems = [];
-  filenames.forEach((filename) => {
-    if (filename.match(/.*\.json/)) {
-      const item = JSON.parse(fs.readFileSync(`${dataDirectory}/${filename}`, 'utf8'));
-      seedItems.push(item);
-    }
-  });
-  return seedItems;
+  return readJsonFilesFromDir(dataDirectory);
 }
 
-
-function addCustomUrlPathToCollectionFiles(collection, customFilePath) {
-  return collection.files.map((file) => {
+/**
+ * Given a Cumulus collection configuration, return a list of the filetype
+ * configs with their `url_path`s updated.
+ *
+ * @param {Object} collection - a Cumulus collection
+ * @param {string} customFilePath - path to be added to the end of the url_path
+ * @returns {Array<Object>} a list of collection filetype configs
+ */
+const addCustomUrlPathToCollectionFiles = (collection, customFilePath) =>
+  collection.files.map((file) => {
     let urlPath;
-    if (Object.is(file.url_path, undefined)) {
-      urlPath = '';
-      if (!Object.is(collection.url_path, undefined)) {
-        urlPath = `${collection.url_path}/`;
-      }
-    } else {
+    if (isString(file.url_path)) {
       urlPath = `${file.url_path}/`;
+    } else if (isString(collection.url_path)) {
+      urlPath = `${collection.url_path}/`;
+    } else {
+      urlPath = '';
     }
-    file.url_path = `${urlPath}${customFilePath}/`;
-    return file;
+
+    return {
+      ...file,
+      url_path: `${urlPath}${customFilePath}/`
+    };
   });
-}
+
+/**
+ * Update a collection with a custom file path, duplicate handling, and name
+ * updated with the postfix.
+ *
+ * @param {Object} params
+ * @param {Object} params.collection - a collection configuration
+ * @param {string} params.customFilePath - path to be added to the end of the
+ *   url_path
+ * @param {string} params.duplicateHandling - duplicate handling setting
+ * @param {string} params.postfix - a string to be appended to the end of the
+ *   name
+ * @returns {Object} an updated collection
+ */
+const buildCollection = (params = {}) => {
+  const {
+    collection, customFilePath, duplicateHandling, postfix
+  } = params;
+
+  const updatedCollection = { ...collection };
+
+  if (postfix) {
+    updatedCollection.name += postfix;
+  }
+
+  if (customFilePath) {
+    updatedCollection.files = addCustomUrlPathToCollectionFiles(
+      collection,
+      customFilePath
+    );
+  }
+
+  if (duplicateHandling) {
+    updatedCollection.duplicateHandling = duplicateHandling;
+  }
+
+  return updatedCollection;
+};
+
+/**
+ * Add a collection to Cumulus
+ *
+ * @param {string} stackName - the prefix of the Cumulus stack
+ * @param {Object} collection - a Cumulus collection
+ * @returns {Promise<undefined>}
+ */
+const addCollection = async (stackName, collection) => {
+  await collectionsApi.deleteCollection(
+    stackName,
+    collection.name,
+    collection.version
+  );
+  await collectionsApi.createCollection(stackName, collection);
+};
+
+/**
+ * Load a collection from a JSON file and update it
+ *
+ * @param {Object} params
+ * @param {string} params.filename - the JSON file containing the collection
+ * @param {string} params.customFilePath
+ * @param {string} params.duplicateHandling
+ * @param {string} params.postfix
+ * @returns {Object} a collection
+ */
+const loadCollection = async (params = {}) =>
+  readJsonFile(params.filename)
+    .then((collection) => buildCollection({ ...params, collection }));
 
 /**
  * add collections to database
@@ -298,29 +398,30 @@ function addCustomUrlPathToCollectionFiles(collection, customFilePath) {
  * @param {string} [postfix] - string to append to collection name
  * @param {string} [customFilePath]
  * @param {string} [duplicateHandling]
- * @returns {Promise.<number>} number of collections added
+ * @returns {Promise<number>} number of collections added
  */
 async function addCollections(stackName, bucketName, dataDirectory, postfix,
   customFilePath, duplicateHandling) {
-  const collections = await setupSeedData(stackName, bucketName, dataDirectory);
-  const promises = collections.map((collection) => limit(() => {
-    if (postfix) {
-      collection.name += postfix;
-      collection.dataType += postfix;
-    }
-    if (customFilePath) {
-      collection.files = addCustomUrlPathToCollectionFiles(collection, customFilePath);
-    }
-    if (duplicateHandling) {
-      collection.duplicateHandling = duplicateHandling;
-    }
-    const c = new Collection();
-    const id = constructCollectionId(collection.name, collection.version);
-    console.log(`Adding collection ${id}`);
-    return c.delete(collection)
-      .then(() => api.addCollectionApi({ prefix: stackName, collection }));
-  }));
-  return Promise.all(promises).then((cs) => cs.length);
+  // setProcessEnvironment is not needed by this function, but other code
+  // depends on this undocumented side effect
+  setProcessEnvironment(stackName, bucketName);
+
+  const rawCollections = await readJsonFilesFromDir(dataDirectory);
+
+  const collections = rawCollections.map(
+    (collection) => buildCollection({
+      collection,
+      customFilePath,
+      duplicateHandling,
+      postfix
+    })
+  );
+
+  await Promise.all(
+    collections.map((collection) => addCollection(stackName, collection))
+  );
+
+  return rawCollections.length;
 }
 
 /**
@@ -332,6 +433,11 @@ async function addCollections(stackName, bucketName, dataDirectory, postfix,
  * @returns {Promise.<Array>} list of collections
  */
 async function listCollections(stackName, bucketName, dataDirectory) {
+  deprecate(
+    '@cumulus/integration-tests/index.listCollections',
+    '1.18.0',
+    '@cumulus/integration-tests/index.readJsonFilesFromDir'
+  );
   return setupSeedData(stackName, bucketName, dataDirectory);
 }
 
@@ -345,20 +451,20 @@ async function listCollections(stackName, bucketName, dataDirectory) {
  * @returns {Promise.<number>} number of deleted collections
  */
 async function deleteCollections(stackName, bucketName, collections, postfix) {
+  // setProcessEnvironment is not needed by this function, but other code
+  // depends on this undocumented side effect
   setProcessEnvironment(stackName, bucketName);
 
-  const promises = collections.map((collection) => {
-    if (postfix) {
-      collection.name += postfix;
-      collection.dataType += postfix;
-    }
-    const c = new Collection();
-    const id = constructCollectionId(collection.name, collection.version);
-    console.log(`Deleting collection ${id}`);
-    return c.delete(collection);
-  });
+  await Promise.all(
+    collections.map(
+      ({ name, version }) => {
+        const realName = postfix ? `${name}${postfix}` : name;
+        return collectionsApi.deleteCollection(stackName, realName, version);
+      }
+    )
+  );
 
-  return Promise.all(promises).then((cs) => cs.length);
+  return collections.length;
 }
 
 /**
@@ -371,7 +477,10 @@ async function deleteCollections(stackName, bucketName, collections, postfix) {
  * @returns {Promise<number>} - number of deleted collections
  */
 async function cleanupCollections(stackName, bucket, collectionsDirectory, postfix) {
-  const collections = await listCollections(stackName, bucket, collectionsDirectory);
+  // setProcessEnvironment is not needed by this function, but other code
+  // depends on this undocumented side effect
+  setProcessEnvironment(stackName, bucket);
+  const collections = await readJsonFilesFromDir(collectionsDirectory);
   return deleteCollections(stackName, bucket, collections, postfix);
 }
 
@@ -402,6 +511,43 @@ function getProviderPort({ protocol, port }) {
 }
 
 /**
+ * Update a provider with a custom s3Host, and update the id to use a postfix.
+ *
+ * @param {Object} params
+ * @param {Object} params.provider
+ * @param {string} params.s3Host
+ * @param {string} params.postfix
+ * @returns {Object} an updated provider
+ */
+const buildProvider = (params = {}) => {
+  const { provider, s3Host, postfix } = params;
+
+  const updatedProvider = { ...provider };
+
+  updatedProvider.port = getProviderPort(provider);
+
+  if (postfix) updatedProvider.id = `${provider.id}${postfix}`;
+
+  if (provider.protocol === 's3' && s3Host) updatedProvider.host = s3Host;
+  else updatedProvider.host = getProviderHost(provider);
+
+  return updatedProvider;
+};
+
+/**
+ * Load a provider from a JSON file and update it
+ *
+ * @param {Object} params
+ * @param {string} params.filename - the JSON file containing the provider
+ * @param {string} params.s3Host
+ * @param {string} params.postfix
+ * @returns {Object} a provider
+ */
+const loadProvider = async (params = {}) =>
+  readJsonFile(params.filename)
+    .then((provider) => buildProvider({ ...params, provider }));
+
+/**
  * add providers to database.
  *
  * @param {string} stackName - Cloud formation stack name
@@ -411,29 +557,32 @@ function getProviderPort({ protocol, port }) {
  * S3 providers. This will override the host from the seed data. Defaults to null,
  * meaning no override.
  * @param {string} [postfix] - string to append to provider id
- * @returns {Promise.<number>} number of providers added
+ * @returns {Promise<number>} number of providers added
  */
 async function addProviders(stackName, bucketName, dataDirectory, s3Host, postfix) {
   const providers = await setupSeedData(stackName, bucketName, dataDirectory);
 
-  const promises = providers.map((provider) => limit(() => {
-    if (postfix) {
-      provider.id += postfix;
-    }
-    const p = new Provider();
+  const completeProviders = providers.map((provider) => {
+    let host;
+    if (s3Host && provider.protocol === 's3') host = s3Host;
+    else host = getProviderHost(provider);
 
-    if (s3Host && provider.protocol === 's3') {
-      provider.host = s3Host;
-    } else {
-      provider.host = getProviderHost(provider);
-    }
+    return {
+      ...provider,
+      id: postfix ? `${provider.id}${postfix}` : provider.id,
+      port: getProviderPort(provider),
+      host
+    };
+  });
 
-    provider.port = getProviderPort(provider);
+  await Promise.all(
+    completeProviders.map(async (provider) => {
+      await providersApi.deleteProvider(stackName, provider.id);
+      await providersApi.createProvider(stackName, provider);
+    })
+  );
 
-    console.log(`adding provider ${provider.id}`);
-    return p.delete(provider).then(() => p.create(provider)).catch(console.log);
-  }));
-  return Promise.all(promises).then((ps) => ps.length);
+  return completeProviders.length;
 }
 
 /**
@@ -445,6 +594,11 @@ async function addProviders(stackName, bucketName, dataDirectory, s3Host, postfi
  * @returns {Promise.<Array>} list of providers
  */
 async function listProviders(stackName, bucketName, dataDirectory) {
+  deprecate(
+    '@cumulus/integration-tests/index.rulesList',
+    '1.18.0',
+    '@cumulus/integration-tests/index.readJsonFilesFromDir'
+  );
   return setupSeedData(stackName, bucketName, dataDirectory);
 }
 
@@ -455,21 +609,23 @@ async function listProviders(stackName, bucketName, dataDirectory) {
  * @param {string} bucketName - S3 internal bucket name
  * @param {Array} providers - List of providers to delete
  * @param {string} postfix - string that was appended to provider id
- * @returns {Promise.<number>} number of deleted providers
+ * @returns {Promise<number>} number of deleted providers
  */
 async function deleteProviders(stackName, bucketName, providers, postfix) {
+  // setProcessEnvironment is not needed by this function, but other code
+  // depends on this undocumented side effect
   setProcessEnvironment(stackName, bucketName);
 
-  const promises = providers.map((provider) => {
-    if (postfix) {
-      provider.id += postfix;
-    }
-    const p = new Provider();
-    console.log(`Deleting provider ${provider.id}`);
-    return p.delete(provider);
-  });
+  await Promise.all(
+    providers.map(
+      ({ id }) => {
+        const readId = postfix ? `${id}${postfix}` : id;
+        return providersApi.deleteProvider(stackName, readId);
+      }
+    )
+  );
 
-  return Promise.all(promises).then((ps) => ps.length);
+  return providers.length;
 }
 
 /**
@@ -482,7 +638,10 @@ async function deleteProviders(stackName, bucketName, providers, postfix) {
  * @returns {number} - number of deleted collections
  */
 async function cleanupProviders(stackName, bucket, providersDirectory, postfix) {
-  const providers = await listProviders(stackName, bucket, providersDirectory);
+  // setProcessEnvironment is not needed by this function, but other code
+  // depends on this undocumented side effect
+  setProcessEnvironment(stackName, bucket);
+  const providers = await readJsonFilesFromDir(providersDirectory);
   return deleteProviders(stackName, bucket, providers, postfix);
 }
 
@@ -517,15 +676,15 @@ async function addRulesWithPostfix(config, dataDirectory, overrides, postfix) {
 
       rule = Object.assign(rule, overrides);
       const ruleTemplate = Handlebars.compile(JSON.stringify(rule));
-      const templatedRule = JSON.parse(ruleTemplate(Object.assign({
+      const templatedRule = JSON.parse(ruleTemplate({
         AWS_ACCOUNT_ID: process.env.AWS_ACCOUNT_ID,
-        AWS_REGION: process.env.AWS_REGION
-      },
-      config)));
+        AWS_REGION: process.env.AWS_REGION,
+        ...config
+      }));
 
-      const r = new Rule();
+      const rulesmodel = new RulesModel();
       console.log(`adding rule ${JSON.stringify(templatedRule)}`);
-      return r.create(templatedRule);
+      return rulesmodel.create(templatedRule);
     },
     { concurrency: 1 }
   );
@@ -550,8 +709,8 @@ function addRules(config, dataDirectory, overrides) {
  * @returns {Promise.<dynamodbDocClient.delete>} - superclass delete promise
  */
 async function _deleteOneRule(name) {
-  const r = new Rule();
-  return r.get({ name }).then((item) => r.delete(item));
+  const rulesModel = new RulesModel();
+  return rulesModel.get({ name }).then((item) => rulesModel.delete(item));
 }
 
 /**
@@ -591,6 +750,7 @@ function isWorkflowTriggeredByRule(taskInput, params) {
  * @returns {list} - list of rules found in rulesDirectory
  */
 async function rulesList(stackName, bucketName, rulesDirectory) {
+  deprecate('@cumulus/integration-tests/index.rulesList', '1.18.0', '@cumulus/integration-tests/index.readJsonFilesFromDir');
   return setupSeedData(stackName, bucketName, rulesDirectory);
 }
 
@@ -603,14 +763,19 @@ async function rulesList(stackName, bucketName, rulesDirectory) {
  * @returns {Promise.<number>} - Number of rules deleted
  */
 async function deleteRules(stackName, bucketName, rules, postfix) {
+  // setProcessEnvironment is not needed by this function, but other code
+  // depends on this undocumented side effect
   setProcessEnvironment(stackName, bucketName);
-  const promises = rules.map((rule) => {
-    if (postfix) {
-      rule.name += postfix;
-    }
-    return limit(() => _deleteOneRule(rule.name));
-  });
-  return Promise.all(promises).then((rs) => rs.length);
+
+  process.env.RulesTable = `${stackName}-RulesTable`;
+
+  await pMap(
+    rules,
+    (rule) => _deleteOneRule(postfix ? `${rule.name}${postfix}` : rule.name),
+    { concurrency: process.env.CONCURRENCY || 3 }
+  );
+
+  return rules.length;
 }
 
 /**
@@ -637,19 +802,25 @@ async function buildWorkflow(
   payload,
   meta
 ) {
-  setProcessEnvironment(stackName, bucketName);
-
   const template = await getWorkflowTemplate(stackName, bucketName);
-  const { name, version } = collection || {};
-  const collectionInfo = collection
-    ? await new Collection().get({ name, version })
-    : {};
-  const providerInfo = provider
-    ? await new Provider().get({ id: provider.id })
-    : {};
 
-  template.meta.collection = collectionInfo;
-  template.meta.provider = providerInfo;
+  if (collection) {
+    template.meta.collection = await collectionsApi.getCollection(
+      stackName,
+      collection.name,
+      collection.version
+    );
+  } else {
+    template.meta.collection = {};
+  }
+
+  if (provider) {
+    const providersModel = new ProvidersModel();
+    template.meta.provider = await providersModel.get({ id: provider.id });
+  } else {
+    template.meta.provider = {};
+  }
+
   template.meta.workflow_name = workflowName;
   template.meta = merge(template.meta, meta);
   template.payload = payload || {};
@@ -726,18 +897,15 @@ async function buildAndStartWorkflow(
 }
 
 /**
- * returns the most recently executed workflows for the workflow type.
+ * returns the most recently executed workflows for the specified state machine.
  *
- * @param {string} workflowName - name of the workflow to get executions for
- * @param {string} stackName - stack name
- * @param {string} bucket - S3 internal bucket name
+ * @param {string} workflowArn - name of the workflow to get executions for
  * @param {number} maxExecutionResults - max results to return
  * @returns {Array<Object>} array of state function executions.
  */
-async function getExecutions(workflowName, stackName, bucket, maxExecutionResults = 10) {
-  const kinesisTriggerTestStpFnArn = await getWorkflowArn(stackName, bucket, workflowName);
+async function getExecutions(workflowArn, maxExecutionResults = 10) {
   const data = await StepFunctions.listExecutions({
-    stateMachineArn: kinesisTriggerTestStpFnArn,
+    stateMachineArn: workflowArn,
     maxResults: maxExecutionResults
   });
   return (orderBy(data.executions, ['startDate'], ['desc']));
@@ -771,17 +939,18 @@ async function waitForTestExecutionStart({
   maxWaitSeconds = maxWaitForStartedExecutionSecs
 }) {
   let timeWaitedSecs = 0;
+  const workflowArn = await getWorkflowArn(stackName, bucket, workflowName);
   /* eslint-disable no-await-in-loop */
   while (timeWaitedSecs < maxWaitSeconds) {
     await sleep(waitPeriodMs);
     timeWaitedSecs += (waitPeriodMs / 1000);
-    const executions = await getExecutions(workflowName, stackName, bucket);
+    const executions = await getExecutions(workflowArn);
 
     for (let executionCtr = 0; executionCtr < executions.length; executionCtr += 1) {
       const execution = executions[executionCtr];
       let taskInput = await lambdaStep.getStepInput(execution.executionArn, startTask);
       if (taskInput) {
-        taskInput = await pullStepFunctionEvent(taskInput);
+        taskInput = await StepFunctions.pullStepFunctionEvent(taskInput);
       }
       if (taskInput && findExecutionFn(taskInput, findExecutionFnParams)) {
         return execution;
@@ -789,6 +958,71 @@ async function waitForTestExecutionStart({
     }
   }
   /* eslint-enable no-await-in-loop */
+  throw new Error('Never found started workflow.');
+}
+
+/**
+ * Deep compares two payloads to ensure payload contains all expected values
+ * Payload may or may not contain additional values that we don't care about.
+ *
+ * @param {Object} payload - actual payload
+ * @param {Object} expectedPayload - expected payload
+ * @returns {boolean} whether payloads are equal
+ */
+const payloadContainsExpected = (payload, expectedPayload) => {
+  let outcome = true;
+  Object.keys(expectedPayload).forEach((key) => {
+    if (!isEqual(payload[key], expectedPayload[key])) {
+      outcome = false;
+    }
+  });
+  return outcome;
+};
+
+/**
+ * Wait for a certain number of test stepfunction executions to exist.
+ *
+ * @param {Object} expectedPayload - expected payload for execution
+ * @param {string} workflowArn - name of the workflow to wait for
+ * @param {integer} maxWaitTimeSecs - maximum time to wait for the correct execution in seconds
+ * @param {integer} numExecutions - The number of executions to wait for
+ * used to query if the workflow has started.
+ * @returns {Array<Object>} [{executionArn: <arn>, status: <status>}]
+ * @throws {Error} any AWS error, re-thrown from AWS execution or 'Workflow Never Started'.
+ */
+async function waitForAllTestSf(
+  expectedPayload,
+  workflowArn,
+  maxWaitTimeSecs,
+  numExecutions
+) {
+  let timeWaitedSecs = 0;
+  const workflowExecutions = [];
+  const startTime = moment();
+
+  /* eslint-disable no-await-in-loop */
+  while (timeWaitedSecs < maxWaitTimeSecs && workflowExecutions.length < numExecutions) {
+    await sleep(waitPeriodMs);
+    timeWaitedSecs = (moment.duration(moment().diff(startTime)).asSeconds());
+    const executions = await getExecutions(workflowArn, 100);
+    // Search all recent executions for target payload
+    for (let ctr = 0; ctr < executions.length; ctr += 1) {
+      const execution = executions[ctr];
+      if (!workflowExecutions.find((e) => e.executionArn === execution.executionArn)) {
+        const executionInput = await getExecutionInputObject(execution.executionArn);
+        if (executionInput !== null
+          && payloadContainsExpected(executionInput.payload, expectedPayload)) {
+          workflowExecutions.push(execution);
+          if (workflowExecutions.length === numExecutions) {
+            break;
+          }
+        }
+      }
+    }
+  }
+  /* eslint-enable no-await-in-loop */
+
+  if (workflowExecutions.length > 0) return workflowExecutions;
   throw new Error('Never found started workflow.');
 }
 
@@ -805,6 +1039,7 @@ module.exports = {
   executeWorkflow,
   buildAndExecuteWorkflow,
   buildAndStartWorkflow,
+  waitForAllTestSf,
   waitForCompletedExecution,
   waitForTestExecutionStart,
   ActivityStep,
@@ -837,5 +1072,10 @@ module.exports = {
   getExecutions,
   waitForDeploymentHandler: waitForDeployment.handler,
   getProviderHost,
-  getProviderPort
+  getProviderPort,
+  loadCollection,
+  loadProvider,
+  getExecutionOutput,
+  readJsonFilesFromDir,
+  setProcessEnvironment
 };

@@ -17,21 +17,28 @@ provider "aws" {
 }
 
 locals {
-  default_tags = {
-    Deployment = var.prefix
-  }
+  tags = merge(var.tags, { Deployment = var.prefix })
+  elasticsearch_alarms            = lookup(data.terraform_remote_state.data_persistence.outputs, "elasticsearch_alarms", [])
+  elasticsearch_domain_arn        = lookup(data.terraform_remote_state.data_persistence.outputs, "elasticsearch_domain_arn", null)
+  elasticsearch_hostname          = lookup(data.terraform_remote_state.data_persistence.outputs, "elasticsearch_hostname", null)
+  elasticsearch_security_group_id = lookup(data.terraform_remote_state.data_persistence.outputs, "elasticsearch_security_group_id", "")
 }
 
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 data "terraform_remote_state" "data_persistence" {
-  backend = "s3"
-  config  = var.data_persistence_remote_state_config
+  backend   = "s3"
+  config    = var.data_persistence_remote_state_config
+  workspace = terraform.workspace
 }
 
 data "aws_lambda_function" "sts_credentials" {
   function_name = "gsfc-ngap-sh-s3-sts-get-keys"
+}
+
+data "aws_ssm_parameter" "ecs_image_id" {
+  name = "image_id_ecs"
 }
 
 module "cumulus" {
@@ -42,9 +49,12 @@ module "cumulus" {
 
   prefix = var.prefix
 
+  deploy_to_ngap = true
+
   vpc_id            = var.vpc_id
   lambda_subnet_ids = var.subnet_ids
 
+  ecs_cluster_instance_image_id   = data.aws_ssm_parameter.ecs_image_id.value
   ecs_cluster_instance_subnet_ids = var.subnet_ids
   ecs_cluster_min_size            = 1
   ecs_cluster_desired_size        = 1
@@ -87,17 +97,17 @@ module "cumulus" {
   saml_entity_id                  = var.saml_entity_id
   saml_assertion_consumer_service = var.saml_assertion_consumer_service
   saml_idp_login                  = var.saml_idp_login
-  saml_launchpad_metadata_path    = var.saml_launchpad_metadata_path
+  saml_launchpad_metadata_url     = var.saml_launchpad_metadata_url
 
   permissions_boundary_arn = var.permissions_boundary_arn
 
   system_bucket = var.system_bucket
   buckets       = var.buckets
 
-  elasticsearch_alarms            = data.terraform_remote_state.data_persistence.outputs.elasticsearch_alarms
-  elasticsearch_domain_arn        = data.terraform_remote_state.data_persistence.outputs.elasticsearch_domain_arn
-  elasticsearch_hostname          = data.terraform_remote_state.data_persistence.outputs.elasticsearch_hostname
-  elasticsearch_security_group_id = data.terraform_remote_state.data_persistence.outputs.elasticsearch_security_group_id
+  elasticsearch_alarms            = local.elasticsearch_alarms
+  elasticsearch_domain_arn        = local.elasticsearch_domain_arn
+  elasticsearch_hostname          = local.elasticsearch_hostname
+  elasticsearch_security_group_id = local.elasticsearch_security_group_id
 
   dynamo_tables = data.terraform_remote_state.data_persistence.outputs.dynamo_tables
 
@@ -117,18 +127,23 @@ module "cumulus" {
     "menno.vandiermen",
     "mhuffnagle2",
     "pquinn1",
-    "brian.tennity"
+    "brian.tennity",
+    "jasmine"
   ]
 
   distribution_url = var.distribution_url
+  thin_egress_jwt_secret_name = var.thin_egress_jwt_secret_name
 
   sts_credentials_lambda_function_arn = data.aws_lambda_function.sts_credentials.arn
 
-  archive_api_port            = var.archive_api_port
-  private_archive_api_gateway = var.private_archive_api_gateway
-  api_gateway_stage = var.api_gateway_stage
+  archive_api_port              = var.archive_api_port
+  private_archive_api_gateway   = var.private_archive_api_gateway
+  api_gateway_stage             = var.api_gateway_stage
   log_api_gateway_to_cloudwatch = var.log_api_gateway_to_cloudwatch
-  log_destination_arn = var.log_destination_arn
+  log_destination_arn           = var.log_destination_arn
+  additional_log_groups_to_elk  = var.additional_log_groups_to_elk
+
+  tags = local.tags
 }
 
 resource "aws_security_group" "no_ingress_all_egress" {
@@ -142,20 +157,46 @@ resource "aws_security_group" "no_ingress_all_egress" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = local.default_tags
+  tags = local.tags
 }
 
-resource "aws_sns_topic_subscription" "sns_s3_test" {
+resource "aws_sns_topic_subscription" "sns_s3_executions_test" {
   topic_arn = module.cumulus.report_executions_sns_topic_arn
   protocol  = "lambda"
-  endpoint  = aws_lambda_function.sns_s3_test.arn
+  endpoint  = aws_lambda_function.sns_s3_executions_test.arn
 }
 
-resource "aws_lambda_permission" "sns_s3_test" {
+resource "aws_lambda_permission" "sns_s3_executions_test" {
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.sns_s3_test.arn
+  function_name = aws_lambda_function.sns_s3_executions_test.arn
   principal     = "sns.amazonaws.com"
   source_arn    = module.cumulus.report_executions_sns_topic_arn
+}
+
+resource "aws_sns_topic_subscription" "sns_s3_granules_test" {
+  topic_arn = module.cumulus.report_granules_sns_topic_arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.sns_s3_granules_test.arn
+}
+
+resource "aws_lambda_permission" "sns_s3_granules_test" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.sns_s3_granules_test.arn
+  principal     = "sns.amazonaws.com"
+  source_arn    = module.cumulus.report_granules_sns_topic_arn
+}
+
+resource "aws_sns_topic_subscription" "sns_s3_pdrs_test" {
+  topic_arn = module.cumulus.report_pdrs_sns_topic_arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.sns_s3_pdrs_test.arn
+}
+
+resource "aws_lambda_permission" "sns_s3_pdrs_test" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.sns_s3_pdrs_test.arn
+  principal     = "sns.amazonaws.com"
+  source_arn    = module.cumulus.report_pdrs_sns_topic_arn
 }
 
 module "s3_access_test_lambda" {
@@ -167,4 +208,6 @@ module "s3_access_test_lambda" {
   providers = {
     aws = "aws.usw2"
   }
+
+  tags = local.tags
 }

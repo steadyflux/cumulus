@@ -1,6 +1,6 @@
 const { Execution } = require('@cumulus/api/models');
 const { buildAndExecuteWorkflow } = require('@cumulus/integration-tests');
-const { ActivityStep } = require('@cumulus/common/sfnStep');
+const { ActivityStep } = require('@cumulus/integration-tests/sfnStep');
 const { loadConfig } = require('../../helpers/testUtils');
 const { waitForModelStatus } = require('../../helpers/apiUtils');
 
@@ -40,7 +40,7 @@ describe('The Hello World workflow using ECS and CMA Layers', () => {
     });
   });
 
-  describe('the sf-sns-report task has published a sns message and', () => {
+  describe('the reporting lambda has received the cloudwatch stepfunction event and', () => {
     it('the execution record is added to DynamoDB', async () => {
       const record = await waitForModelStatus(
         new Execution(),

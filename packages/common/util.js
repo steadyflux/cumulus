@@ -17,6 +17,7 @@ const omitBy = require('lodash.omitby');
 const os = require('os');
 const path = require('path');
 const mime = require('mime-types');
+
 const log = require('./log');
 
 /**
@@ -31,8 +32,9 @@ const log = require('./log');
 exports.deprecate = (name, version, alternative) => {
   let message = `${name} is deprecated after version ${version} and will be removed in a future release.`;
   if (alternative) message += ` Use ${alternative} instead.`;
-
-  log.warn(message);
+  if (!('NO_DEPRECATION_WARNINGS' in process.env)) {
+    log.warn(message);
+  }
 };
 
 /**
@@ -141,6 +143,7 @@ exports.isNil = (x) => exports.isNull(x) || exports.isUndefined(x);
  * @param {string} newStack - a stack trace
  */
 exports.setErrorStack = (error, newStack) => {
+  exports.deprecate('@cumulus/common/util/setErrorStack', '1.17.0', '@cumulus/aws-client/utils/setErrorStack');
   // eslint-disable-next-line no-param-reassign
   error.stack = [
     error.stack.split('\n')[0],

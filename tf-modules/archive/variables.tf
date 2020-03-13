@@ -26,6 +26,11 @@ variable "cmr_username" {
   type = string
 }
 
+variable "deploy_to_ngap" {
+  description = "Whether or not this instance of Cumulus is deployed to an NGAP environment"
+  type        = bool
+}
+
 variable "distribution_api_id" {
   type = string
 }
@@ -43,15 +48,18 @@ variable "ecs_cluster_name" {
 }
 
 variable "elasticsearch_domain_arn" {
-  type = string
+  type    = string
+  default = null
 }
 
 variable "elasticsearch_hostname" {
-  type = string
+  type    = string
+  default = null
 }
 
 variable "elasticsearch_security_group_id" {
-  type = string
+  type    = string
+  default = ""
 }
 
 variable "ems_host" {
@@ -184,7 +192,7 @@ variable "ems_username" {
 
 variable "lambda_subnet_ids" {
   type    = list(string)
-  default = null
+  default = []
 }
 
 variable "launchpad_api" {
@@ -262,14 +270,20 @@ variable "saml_idp_login" {
   default = "N/A"
 }
 
-variable "saml_launchpad_metadata_path" {
+variable "saml_launchpad_metadata_url" {
   type    = string
   default = "N/A"
 }
 
+variable "tags" {
+  description = "Tags to be applied to managed resources"
+  type        = map(string)
+  default     = {}
+}
+
 variable "urs_url" {
   type        = string
-  default     = "https://uat.urs.earthdata.nasa.gov/"
+  default     = "https://uat.urs.earthdata.nasa.gov"
   description = "The URL of the Earthdata Login site"
 }
 
@@ -314,4 +328,10 @@ variable "non_complete_execution_payload_timeout" {
   description = "Number of days to retain 'non-complete' execution payload records in the database"
   type    = number
   default = 30
+}
+
+variable "log_destination_arn" {
+  type = string
+  default = "N/A"
+  description = "A shared AWS:Log:Destination that receives logs from log_groups"
 }

@@ -2,21 +2,22 @@
 
 const test = require('ava');
 const request = require('supertest');
-const aws = require('@cumulus/common/aws');
+const awsServices = require('@cumulus/aws-client/services');
+const { recursivelyDeleteS3Bucket } = require('@cumulus/aws-client/S3');
 const { randomString } = require('@cumulus/common/test-utils');
 const models = require('../../models');
 const bootstrap = require('../../lambdas/bootstrap');
 const indexer = require('../../es/indexer');
 const {
   createFakeJwtAuthToken,
-  fakePdrFactory
+  fakePdrFactory,
+  setAuthorizedOAuthUsers
 } = require('../../lib/testUtils');
 const { Search } = require('../../es/search');
 const assertions = require('../../lib/assertions');
 
 process.env.AccessTokensTable = randomString();
 process.env.PdrsTable = randomString();
-process.env.UsersTable = randomString();
 process.env.stackName = randomString();
 process.env.system_bucket = randomString();
 process.env.TOKEN_SECRET = randomString();
@@ -24,17 +25,14 @@ process.env.TOKEN_SECRET = randomString();
 // import the express app after setting the env variables
 const { app } = require('../../app');
 
-const pdrS3Key = (stackName, bucket, pdrName) => `${process.env.stackName}/pdrs/${pdrName}`;
+const pdrS3Key = (pdrName) => `${process.env.stackName}/pdrs/${pdrName}`;
 
-function uploadPdrToS3(stackName, bucket, pdrName, pdrBody) {
-  const key = pdrS3Key(stackName, bucket, pdrName);
-
-  return aws.s3().putObject({
+const uploadPdrToS3 = (bucket, pdrName, pdrBody) =>
+  awsServices.s3().putObject({
     Bucket: bucket,
-    Key: key,
+    Key: pdrS3Key(pdrName),
     Body: pdrBody
   }).promise();
-}
 
 // create all the variables needed across this test
 let esClient;
@@ -44,7 +42,6 @@ const esIndex = randomString();
 let jwtAuthToken;
 let accessTokenModel;
 let pdrModel;
-let userModel;
 
 test.before(async () => {
   // create esClient
@@ -57,18 +54,18 @@ test.before(async () => {
   await bootstrap.bootstrapElasticSearch('fakehost', esIndex, esAlias);
 
   // create a fake bucket
-  await aws.s3().createBucket({ Bucket: process.env.system_bucket }).promise();
+  await awsServices.s3().createBucket({ Bucket: process.env.system_bucket }).promise();
 
   pdrModel = new models.Pdr();
   await pdrModel.createTable();
 
-  userModel = new models.User();
-  await userModel.createTable();
+  const username = randomString();
+  await setAuthorizedOAuthUsers([username]);
 
   accessTokenModel = new models.AccessToken();
   await accessTokenModel.createTable();
 
-  jwtAuthToken = await createFakeJwtAuthToken({ accessTokenModel, userModel });
+  jwtAuthToken = await createFakeJwtAuthToken({ accessTokenModel, username });
 
   // create fake PDR records
   fakePdrs = ['completed', 'failed'].map(fakePdrFactory);
@@ -83,9 +80,8 @@ test.before(async () => {
 test.after.always(async () => {
   await accessTokenModel.deleteTable();
   await pdrModel.deleteTable();
-  await userModel.deleteTable();
   await esClient.indices.delete({ index: esIndex });
-  await aws.recursivelyDeleteS3Bucket(process.env.system_bucket);
+  await recursivelyDeleteS3Bucket(process.env.system_bucket);
 });
 
 test('CUMULUS-911 GET without pathParameters and without an Authorization header returns an Authorization Missing response', async (t) => {
@@ -196,7 +192,7 @@ test('DELETE a pdr', async (t) => {
   await pdrModel.create(newPdr);
 
   const key = `${process.env.stackName}/pdrs/${newPdr.pdrName}`;
-  await aws.s3().putObject({ Bucket: process.env.system_bucket, Key: key, Body: 'test data' }).promise();
+  await awsServices.s3().putObject({ Bucket: process.env.system_bucket, Key: key, Body: 'test data' }).promise();
 
   const response = await request(app)
     .delete(`/pdrs/${newPdr.pdrName}`)
@@ -213,7 +209,6 @@ test('DELETE handles the case where the PDR exists in S3 but not in DynamoDb', a
   const pdrName = `${randomString()}.PDR`;
 
   await uploadPdrToS3(
-    process.env.stackName,
     process.env.system_bucket,
     pdrName,
     'This is the PDR body'

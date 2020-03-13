@@ -1,10 +1,12 @@
 'use strict';
 
 const router = require('express-promise-router')();
-const aws = require('@cumulus/common/aws'); // important to import all to allow stubbing
-const { StepFunction } = require('@cumulus/ingest/aws');
-const { executionExists } = require('@cumulus/common/StepFunctions');
-const { RecordDoesNotExist } = require('@cumulus/common/errors');
+const {
+  getStateMachineArn,
+  pullStepFunctionEvent
+} = require('@cumulus/aws-client/StepFunctions');
+const StepFunctions = require('@cumulus/aws-client/StepFunctions');
+const { RecordDoesNotExist } = require('@cumulus/errors');
 const models = require('../models');
 
 /**
@@ -14,7 +16,7 @@ const models = require('../models');
  * @returns {string}              Cumulus Message Adapter message in JSON string
  */
 async function fetchRemote(eventMessage) {
-  const updatedEventMessage = await aws.pullStepFunctionEvent(eventMessage);
+  const updatedEventMessage = await pullStepFunctionEvent(eventMessage);
   return JSON.stringify(updatedEventMessage);
 }
 
@@ -29,7 +31,7 @@ async function fetchRemote(eventMessage) {
  *                        and message stored on S3, respectively.
  */
 async function getEventDetails(event) {
-  let result = Object.assign({}, event);
+  let result = { ...event };
   let prop;
 
   if (event.type.endsWith('StateEntered')) {
@@ -62,8 +64,8 @@ async function get(req, res) {
   const arn = req.params.arn;
 
   // if the execution exists in SFN API, retrieve its information, if not, get from database
-  if (await executionExists(arn)) {
-    const status = await StepFunction.getExecutionStatus(arn);
+  if (await StepFunctions.executionExists(arn)) {
+    const status = await StepFunctions.getExecutionStatus(arn);
 
     // if execution output is stored remotely, fetch it from S3 and replace it
     const executionOutput = status.execution.output;
@@ -94,7 +96,7 @@ async function get(req, res) {
   const warning = 'Execution does not exist in Step Functions API';
   const execution = {
     executionArn: response.arn,
-    stateMachineArn: aws.getStateMachineArn(response.arn),
+    stateMachineArn: getStateMachineArn(response.arn),
     name: response.name,
     status: response.status === 'completed' ? 'SUCCEEDED' : response.status.toUpperCase(),
     startDate: new Date(response.createdAt),

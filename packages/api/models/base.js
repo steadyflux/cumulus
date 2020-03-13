@@ -2,10 +2,10 @@
 
 const get = require('lodash.get');
 const Ajv = require('ajv');
-const aws = require('@cumulus/common/aws');
 const pWaitFor = require('p-wait-for');
-const DynamoDb = require('@cumulus/common/DynamoDb');
-const { RecordDoesNotExist } = require('@cumulus/common/errors');
+const awsServices = require('@cumulus/aws-client/services');
+const DynamoDb = require('@cumulus/aws-client/DynamoDb');
+const { RecordDoesNotExist } = require('@cumulus/errors');
 const { inTestMode } = require('@cumulus/common/test-utils');
 const { errorify } = require('../lib/utils');
 
@@ -18,11 +18,11 @@ async function enableStream(tableName) {
     }
   };
 
-  await aws.dynamodb().updateTable(params).promise();
+  await awsServices.dynamodb().updateTable(params).promise();
 
   await pWaitFor(
     async () =>
-      aws.dynamodb().describeTable({ TableName: tableName }).promise()
+      awsServices.dynamodb().describeTable({ TableName: tableName }).promise()
         .then((response) => response.TableStatus !== 'UPDATING'),
     { interval: 5 * 1000 }
   );
@@ -67,8 +67,8 @@ async function createTable(tableName, hash, range = null, attributes = null, ind
     });
   }
 
-  const output = await aws.dynamodb().createTable(params).promise();
-  await aws.dynamodb().waitFor('tableExists', { TableName: tableName }).promise();
+  const output = await awsServices.dynamodb().createTable(params).promise();
+  await awsServices.dynamodb().waitFor('tableExists', { TableName: tableName }).promise();
 
   if (!inTestMode()) await enableStream(tableName);
 
@@ -76,11 +76,11 @@ async function createTable(tableName, hash, range = null, attributes = null, ind
 }
 
 async function deleteTable(tableName) {
-  const output = await aws.dynamodb().deleteTable({
+  const output = await awsServices.dynamodb().deleteTable({
     TableName: tableName
   }).promise();
 
-  await aws.dynamodb().waitFor('tableNotExists', { TableName: tableName }).promise();
+  await awsServices.dynamodb().waitFor('tableNotExists', { TableName: tableName }).promise();
   return output;
 }
 
@@ -160,7 +160,7 @@ class Manager {
     this.tableAttributes = params.tableAttributes;
     this.tableIndexes = params.tableIndexes;
     this.schema = params.schema;
-    this.dynamodbDocClient = aws.dynamodbDocClient({ convertEmptyValues: true });
+    this.dynamodbDocClient = awsServices.dynamodbDocClient({ convertEmptyValues: true });
     this.removeAdditional = false;
 
     this.validate = get(params, 'validate', true);
@@ -430,6 +430,56 @@ class Manager {
       key,
       { status: 'failed', error: errorify(err), isActive: false }
     );
+  }
+
+  /**
+   * Build the parameters for dynamodbDocClient.update(). Allows conditional
+   * updating of fields based on specification of which fields should be
+   * mutable. Fields not specified as mutable will be set to only update if
+   * there is not already an existing value.
+   *
+   * @param {Object} params
+   * @param {Object} params.item - The data item to be updated
+   * @param {Object} params.itemKey
+   *   Object containing the unique key(s) identifying the item
+   * @param {Array} params.mutableFieldNames
+   *   Array of field names which should be mutable (updated even if there is an existing value)
+   * @returns {Object} - Parameters for dynamodbDocClient.update() operation
+   */
+  _buildDocClientUpdateParams({
+    item,
+    itemKey,
+    mutableFieldNames = []
+  }) {
+    const ExpressionAttributeNames = {};
+    const ExpressionAttributeValues = {};
+    const setUpdateExpressions = [];
+
+    const itemKeyFieldNames = Object.keys(itemKey);
+
+    Object.entries(item).forEach(([fieldName, value]) => {
+      if (itemKeyFieldNames.includes(fieldName)) return;
+      if (value === undefined) return;
+
+      ExpressionAttributeNames[`#${fieldName}`] = fieldName;
+      ExpressionAttributeValues[`:${fieldName}`] = value;
+
+      if (mutableFieldNames.includes(fieldName)) {
+        setUpdateExpressions.push(`#${fieldName} = :${fieldName}`);
+      } else {
+        setUpdateExpressions.push(`#${fieldName} = if_not_exists(#${fieldName}, :${fieldName})`);
+      }
+    });
+
+    if (setUpdateExpressions.length === 0) return null;
+
+    return {
+      TableName: this.tableName,
+      Key: itemKey,
+      ExpressionAttributeNames,
+      ExpressionAttributeValues,
+      UpdateExpression: `SET ${setUpdateExpressions.join(', ')}`
+    };
   }
 }
 

@@ -1,7 +1,9 @@
 'use strict';
 
+const lodashGet = require('lodash.get');
+const pMap = require('p-map');
 const router = require('express-promise-router')();
-const aws = require('@cumulus/common/aws');
+const { deleteS3Object } = require('@cumulus/aws-client/S3');
 const log = require('@cumulus/common/log');
 const { inTestMode } = require('@cumulus/common/test-utils');
 const Search = require('../es/search').Search;
@@ -55,14 +57,17 @@ async function put(req, res) {
 
     await granuleModelClient.reingest({ ...granule, queueName: process.env.backgroundQueueName });
 
-    const warning = 'The granule files may be overwritten';
-
-    return res.send(Object.assign({
-      granuleId: granule.granuleId,
+    const response = {
       action,
+      granuleId: granule.granuleId,
       status: 'SUCCESS'
-    },
-    (collection.duplicateHandling !== 'replace') ? { warning } : {}));
+    };
+
+    if (collection.duplicateHandling !== 'replace') {
+      response.warning = 'The granule files may be overwritten';
+    }
+
+    return res.send(response);
   }
 
   if (action === 'applyWorkflow') {
@@ -136,14 +141,10 @@ async function del(req, res) {
   }
 
   // remove files from s3
-  if (granule.files) {
-    await Promise.all(granule.files.map(async (file) => {
-      if (await aws.fileExists(file.bucket, file.key)) {
-        return aws.deleteS3Object(file.bucket, file.key);
-      }
-      return {};
-    }));
-  }
+  await pMap(
+    lodashGet(granule, 'files', []),
+    ({ bucket, key }) => deleteS3Object(bucket, key)
+  );
 
   await granuleModelClient.delete({ granuleId });
 
@@ -212,11 +213,23 @@ async function bulk(req, res) {
     tableName: process.env.AsyncOperationsTable
   });
 
+  let description;
+
+  if (payload.query) {
+    description = `Bulk run ${payload.workflowName} on ${payload.query.size} granules`;
+  } else if (payload.ids) {
+    description = `Bulk run ${payload.workflowName} on ${payload.ids.length} granules`;
+  } else {
+    description = `Bulk run on ${payload.workflowName}`;
+  }
+
   try {
     const asyncOperation = await asyncOperationModel.start({
       asyncOperationTaskDefinition: process.env.AsyncOperationTaskDefinition,
       cluster: process.env.EcsCluster,
       lambdaName: process.env.BulkOperationLambda,
+      description,
+      operationType: 'Bulk Granules',
       payload: {
         payload,
         type: 'BULK_GRANULE',

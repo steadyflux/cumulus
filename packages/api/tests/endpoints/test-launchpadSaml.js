@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const got = require('got');
 const test = require('ava').serial;
 const sinon = require('sinon');
 const rewire = require('rewire');
@@ -8,11 +9,16 @@ const request = require('supertest');
 const { URL } = require('url');
 const saml2 = require('saml2-js');
 
-const aws = require('@cumulus/common/aws');
+const awsServices = require('@cumulus/aws-client/services');
+const {
+  parseS3Uri,
+  recursivelyDeleteS3Bucket,
+  s3PutObject
+} = require('@cumulus/aws-client/S3');
 const { randomId } = require('@cumulus/common/test-utils');
 
 const { verifyJwtToken } = require('../../lib/token');
-const { AccessToken, User } = require('../../models');
+const { AccessToken } = require('../../models');
 const launchpadSaml = rewire('../../endpoints/launchpadSaml');
 const launchpadPublicCertificate = launchpadSaml.__get__(
   'launchpadPublicCertificate'
@@ -21,18 +27,18 @@ const authorizedUserGroup = launchpadSaml.__get__('authorizedUserGroup');
 const buildLaunchpadJwt = launchpadSaml.__get__('buildLaunchpadJwt');
 
 process.env.OAUTH_PROVIDER = 'launchpad';
-process.env.UsersTable = randomId('usersTable');
 process.env.AccessTokensTable = randomId('tokenTable');
 process.env.stackName = randomId('stackname');
 process.env.TOKEN_SECRET = randomId('token_secret');
 process.env.system_bucket = randomId('systembucket');
+process.env.LAUNCHPAD_METADATA_URL = 'http://example.com/launchpad.idp.xml';
 
 const { app } = require('../../app');
 
 const testBucketName = randomId('testbucket');
-const createBucket = (Bucket) => aws.s3().createBucket({ Bucket }).promise();
+const createBucket = (Bucket) => awsServices.s3().createBucket({ Bucket }).promise();
 const testBucketNames = [process.env.system_bucket, testBucketName];
-process.env.LAUNCHPAD_METADATA_PATH = `s3://${testBucketName}/valid-metadata.xml`;
+const launchpadMetadataS3Uri = launchpadSaml.__get__('launchpadMetadataS3Uri');
 
 const xmlMetadataFixture = fs.readFileSync(
   `${__dirname}/fixtures/launchpad-sbx-metadata.xml`,
@@ -54,23 +60,33 @@ const testFiles = [goodMetadataFile, badMetadataFile];
 
 const certificate = require('./fixtures/_certificateFixture');
 
+const gotLaunchpadMetadataResponse = {
+  statusCode: 200,
+  statusMessage: 'OK',
+  body: xmlMetadataFixture
+};
+
 let accessTokenModel;
-let userModel;
 test.before(async () => {
   accessTokenModel = new AccessToken();
   await accessTokenModel.createTable();
-  userModel = new User();
-  await userModel.createTable();
 
   await Promise.all(testBucketNames.map(createBucket));
   await Promise.all(
     testFiles.map((f) =>
-      aws.s3PutObject({
+      s3PutObject({
         Bucket: testBucketName,
         Key: f.key,
         Body: f.content
       }))
   );
+
+  const { Bucket, Key } = parseS3Uri(launchpadMetadataS3Uri());
+  await s3PutObject({
+    Bucket,
+    Key,
+    Body: xmlMetadataFixture
+  });
 });
 
 let sandbox;
@@ -127,9 +143,8 @@ test.afterEach(async () => {
 });
 
 test.after.always(async () => {
-  await Promise.all(testBucketNames.map(aws.recursivelyDeleteS3Bucket));
+  await Promise.all(testBucketNames.map(recursivelyDeleteS3Bucket));
   await accessTokenModel.deleteTable();
-  await userModel.deleteTable();
 });
 
 test(
@@ -157,25 +172,24 @@ test(
 );
 
 test(
-  'launchpadPublicCertificate throws error with missing metadata file.',
+  'launchpadPublicCertificate downloads the metadata file to s3 when metadata is missing.',
   async (t) => {
-    await t.throwsAsync(
-      launchpadPublicCertificate(`s3://${testBucketName}/location`),
-      {
-        instanceOf: Error,
-        message: `Cumulus could not find Launchpad public xml metadata at s3://${testBucketName}/location`
-      }
-    );
+    const stub = sinon.stub(got, 'get').callsFake(() => gotLaunchpadMetadataResponse);
+    const parsedCertificate = await launchpadPublicCertificate(`s3://${testBucketName}/location`);
+    t.deepEqual(parsedCertificate, certificate);
+    stub.restore();
   }
 );
 
 test(
   'launchpadPublicCertificate throws error with missing bucket.',
   async (t) => {
+    const stub = sinon.stub(got, 'get').callsFake(() => gotLaunchpadMetadataResponse);
     await t.throwsAsync(launchpadPublicCertificate('s3://badBucket/location'), {
       instanceOf: Error,
       message: 'Cumulus could not find Launchpad public xml metadata at s3://badBucket/location'
     });
+    stub.restore();
   }
 );
 

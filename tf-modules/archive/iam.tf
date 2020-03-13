@@ -14,8 +14,8 @@ resource "aws_iam_role" "lambda_api_gateway" {
   name                 = "${var.prefix}-lambda-api-gateway"
   assume_role_policy   = data.aws_iam_policy_document.lambda_assume_role_policy.json
   permissions_boundary = var.permissions_boundary_arn
-  # TODO Re-enable once IAM permissions have been fixed
-  # tags                 = local.default_tags
+
+  tags = var.tags
 }
 
 data "aws_iam_policy_document" "lambda_api_gateway_policy" {
@@ -172,7 +172,10 @@ data "aws_iam_policy_document" "lambda_api_gateway_policy" {
 
   statement {
     actions = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.api_cmr_password.arn]
+    resources = [
+      aws_secretsmanager_secret.api_cmr_password.arn,
+      aws_secretsmanager_secret.api_launchpad_passphrase.arn
+    ]
   }
 }
 

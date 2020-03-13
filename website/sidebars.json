@@ -37,10 +37,13 @@
     "Deployment Options":[
       "additional-deployment-options/api-gateway-logging",
       "additional-deployment-options/share-s3-access-logs",
+      "additional-deployment-options/cloudwatch-logs-delivery",
       "additional-deployment-options/cmr_launchpad_authentication",
-      "additional-deployment-options/cumulus_api_launchpad_authentication"
+      "additional-deployment-options/cumulus_api_launchpad_authentication",
+      "additional-deployment-options/cumulus_saml_launchpad_integration"
     ],
     "Additional Features": [
+      "features/backup_and_restore",
       "features/data_in_dynamodb",
       "features/dead_letter_queues",
       "features/ems_reporting",
@@ -65,7 +68,7 @@
     ],
     "Cookbooks": [
       "data-cookbooks/hello-world",
-      "data-cookbooks/sns",
+      "data-cookbooks/ingest-notifications",
       "data-cookbooks/sips-workflow",
       "data-cookbooks/cnm-workflow",
       "data-cookbooks/error-handling",
@@ -87,6 +90,7 @@
       "operator-docs/collection-storage-best-practices"
     ],
     "Operations": [
+      "operator-docs/discovery-filtering",
       "operator-docs/rerunning-workflow-executions",
       "operator-docs/replay-kinesis-messages"
     ]

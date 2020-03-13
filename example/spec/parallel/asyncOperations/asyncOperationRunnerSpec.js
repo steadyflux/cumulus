@@ -1,10 +1,8 @@
 'use strict';
 
 const uuidv4 = require('uuid/v4');
-const {
-  aws: { ecs, s3 },
-  testUtils: { randomString }
-} = require('@cumulus/common');
+const { ecs, s3 } = require('@cumulus/aws-client/services');
+const { randomString } = require('@cumulus/common/test-utils');
 const {
   getClusterArn,
   waitForAsyncOperationStatus
@@ -58,6 +56,8 @@ describe('The AsyncOperation task runner', () => {
         asyncOperationTaskDefinition,
         cluster,
         lambdaName: 'does-not-exist',
+        description: 'Some description',
+        operationType: 'ES Index',
         payload: {}
       }));
 
@@ -103,6 +103,8 @@ describe('The AsyncOperation task runner', () => {
       await asyncOperationModel.create({
         id: asyncOperationId,
         taskArn: randomString(),
+        description: 'Some description',
+        operationType: 'ES Index',
         status: 'RUNNING'
       });
 
@@ -178,6 +180,8 @@ describe('The AsyncOperation task runner', () => {
       await asyncOperationModel.create({
         id: asyncOperationId,
         taskArn: randomString(),
+        description: 'Some description',
+        operationType: 'ES Index',
         status: 'RUNNING'
       });
 
@@ -254,6 +258,8 @@ describe('The AsyncOperation task runner', () => {
       await asyncOperationModel.create({
         id: asyncOperationId,
         taskArn: randomString(),
+        description: 'Some description',
+        operationType: 'ES Index',
         status: 'RUNNING'
       });
 
@@ -330,6 +336,8 @@ describe('The AsyncOperation task runner', () => {
       await asyncOperationModel.create({
         id: asyncOperationId,
         taskArn: randomString(),
+        description: 'Some description',
+        operationType: 'ES Index',
         status: 'RUNNING'
       });
 

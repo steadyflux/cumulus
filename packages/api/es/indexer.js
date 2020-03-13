@@ -13,9 +13,9 @@
 const cloneDeep = require('lodash.clonedeep');
 const isString = require('lodash.isstring');
 const zlib = require('zlib');
+const { constructCollectionId } = require('@cumulus/common/collection-config-store');
 const log = require('@cumulus/common/log');
 const { inTestMode } = require('@cumulus/common/test-utils');
-const { constructCollectionId } = require('@cumulus/common');
 
 const { Search, defaultIndexAlias } = require('./search');
 const { Granule } = require('../models');
@@ -151,6 +151,20 @@ async function genericRecordUpdate(esClient, id, doc, index, type, parent) {
  */
 function indexExecution(esClient, payload, index = defaultIndexAlias, type = 'execution') {
   return genericRecordUpdate(esClient, payload.arn, payload, index, type);
+}
+
+/**
+ * Indexes a step function message to Elastic Search. The message must
+ * comply with the cumulus message protocol
+ *
+ * @param  {Object} esClient - ElasticSearch Connection object
+ * @param  {Object} payload  - Cumulus Step Function message
+ * @param  {string} index    - Elasticsearch index alias (default defined in search.js)
+ * @param  {string} type     - Elasticsearch type (default: asyncOperation)
+ * @returns {Promise} elasticsearch update response
+ */
+function indexAsyncOperation(esClient, payload, index = defaultIndexAlias, type = 'asyncOperation') {
+  return genericRecordUpdate(esClient, payload.id, payload, index, type);
 }
 
 /**
@@ -359,6 +373,7 @@ module.exports = {
   indexGranule,
   indexPdr,
   indexExecution,
+  indexAsyncOperation,
   deleteRecord,
   reingest
 };
