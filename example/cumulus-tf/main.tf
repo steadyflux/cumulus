@@ -143,6 +143,21 @@ module "cumulus" {
   tags = local.tags
 }
 
+module "s3_replicator" {
+  source = "../../tf-modules/s3-replicator"
+  prefix = var.prefix
+  
+  permissions_boundary = var.permissions_boundary_arn
+  
+  vpc_id     = var.vpc_id
+  subnet_ids = var.subnet_ids
+  
+  source_bucket = var.s3_replicator_config.source_bucket
+  source_prefix = var.s3_replicator_config.source_prefix
+  target_bucket = var.s3_replicator_config.target_bucket
+  target_prefix = var.s3_replicator_config.target_prefix
+}
+
 resource "aws_security_group" "no_ingress_all_egress" {
   name   = "${var.prefix}-cumulus-tf-no-ingress-all-egress"
   vpc_id = var.vpc_id
