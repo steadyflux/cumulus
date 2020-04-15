@@ -22,7 +22,7 @@ buckets = {
 }
 s3_replicator_config = {
   source_bucket = "cumulus-sit-internal"
-  source_prefix = "cumulus-sit/ems-distribution/s3-server-access-logs/"
+  source_prefix = "cumulus-dev-sit/ems-distribution/s3-server-access-logs/"
   target_bucket = "esdis-metrics-shared-data-sit"
   target_prefix = "input/s3_access/cumulus-sit"
 }
