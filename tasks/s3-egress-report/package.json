@@ -1,0 +1,13 @@
+{
+  "engines": {
+    "node": ">=12"
+  },
+  "dependencies": {
+    "@elastic/elasticsearch": "^7.6.1",
+    "aws-sdk": "^2.656.0",
+    "cidr-matcher": "^2.1.1",
+    "got": "^10.7.0",
+    "lodash": "^4.17.15",
+    "p-reduce": "^2.1.0"
+  }
+}
