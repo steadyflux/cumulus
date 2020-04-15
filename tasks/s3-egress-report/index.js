@@ -2,7 +2,7 @@
  * S3 server access logs are being indexed into the metrics team's Elasticsearch server. This code
  * will take a bucket as an argument and query the metrics ES server for all of the REST.GET.OBJECT
  * actions that have been indexed for that bucket. Once it has those log entries, it will group them
- * by egress destination and sum the total number of bytes transferred to each destionatinon.
+ * by egress destination and sum the total number of bytes transferred to each destination.
  *
  * Given the "Remote IP" in the S3 server access logs and the list of Amazon IPs that AWS provides,
  * we are able to break the results up into the following groups:
