@@ -1,9 +1,7 @@
 /* eslint no-console: "off" */
 
-'use strict';
-
-const isError = require('lodash/isError');
-const { format } = require('util');
+import isError from 'lodash.iserror';
+import util from 'util';
 
 const privates = new WeakMap();
 
@@ -144,7 +142,7 @@ class Logger {
       executions,
       granules,
       level,
-      message: format(...messageArgs),
+      message: util.format(...messageArgs),
       parentArn,
       sender,
       stackName,
@@ -166,4 +164,5 @@ class Logger {
     else thisConsole.log(logEventString);
   }
 }
-module.exports = Logger;
+
+export default Logger;

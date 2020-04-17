@@ -18,9 +18,8 @@
     "type": "git",
     "url": "https://github.com/nasa/cumulus"
   },
-  "scripts": {
-    "build": "true",
-    "test": "ava"
+  "ava": {
+    "verbose": true
   },
   "nyc": {
     "exclude": [
@@ -30,10 +29,12 @@
   "author": "Cumulus Authors",
   "license": "Apache-2.0",
   "dependencies": {
-    "lodash": "^4.17.15"
+    "lodash.iserror": "^3.1.1"
   },
   "devDependencies": {
+    "@types/lodash.iserror": "^3.1.6",
     "ava": "^2.1.0",
-    "moment": "^2.22.2"
+    "moment": "^2.22.2",
+    "typescript": "^3.8.3"
   }
 }
