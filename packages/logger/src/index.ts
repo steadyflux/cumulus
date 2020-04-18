@@ -3,9 +3,31 @@
 import isError from 'lodash.iserror';
 import util from 'util';
 
-const privates = new WeakMap();
+type Level = 'debug' | 'error' | 'fatal' | 'info' | 'trace' | 'warn'
+
+type LoggerConstructorOptions = {
+  asyncOperationId?: string,
+  executions?: string,
+  granules?: string,
+  parentArn?: string,
+  pretty: boolean,
+  sender: string,
+  stackName?: string,
+  console?: Console,
+  version?: string
+}
 
 class Logger {
+  private asyncOperationId: string | undefined;
+  private executions: string | undefined;
+  private granules: string | undefined;
+  private parentArn: string | undefined;
+  private pretty: boolean;
+  private sender: string;
+  private stackName: string | undefined;
+  private thisConsole: Console;
+  private version: string | undefined;
+
   /**
    * @param {Object} options - options object
    * @param {string} [options.executions]  - AWS stepfunction execution name
@@ -20,21 +42,16 @@ class Logger {
    *   log events to
    * @param {string} [options.version] - Lambda function version
    */
-  constructor(options) {
-    privates.set(
-      this,
-      {
-        asyncOperationId: options.asyncOperationId,
-        executions: options.executions,
-        granules: options.granules,
-        parentArn: options.parentArn,
-        pretty: options.pretty || false,
-        sender: options.sender || 'unknown',
-        stackName: options.stackName,
-        thisConsole: options.console || global.console,
-        version: options.version
-      }
-    );
+  constructor(options: LoggerConstructorOptions) {
+    this.asyncOperationId = options.asyncOperationId;
+    this.executions = options.executions;
+    this.granules = options.granules;
+    this.parentArn = options.parentArn;
+    this.pretty = options.pretty || false;
+    this.sender = options.sender || 'unknown';
+    this.stackName = options.stackName;
+    this.thisConsole = options.console || global.console;
+    this.version = options.version;
   }
 
   /**
@@ -42,8 +59,8 @@ class Logger {
    *
    * @param {string} messageArgs - the message to log
    */
-  debug(...messageArgs) {
-    this._writeLogEvent('debug', messageArgs);
+  debug(format: any, ...args: any[]) {
+    this._writeLogEvent('debug', [format, ...args]);
   }
 
   /**
@@ -51,16 +68,21 @@ class Logger {
    *
    * @param {string} messageArgs - the message to log
    */
-  error(...messageArgs) {
+  error(format: any, ...args: any[]) {
+    const messageArgs = [format, ...args];
     const lastMessageArg = messageArgs[messageArgs.length - 1];
 
     if (isError(lastMessageArg)) {
       const error = lastMessageArg;
 
-      let actualMessageArgs = messageArgs.slice(0, messageArgs.length - 1);
-      if (actualMessageArgs.length === 0) actualMessageArgs = [error.message];
+      let actualMessageArgs: [any, ...any[]];
+      if (args.length === 0) {
+        actualMessageArgs = [error.message];
+      } else {
+        actualMessageArgs = [format, ...args.slice(0, args.length - 1)];
+      }
 
-      const additionalKeys = {
+      const additionalKeys: { error: { name: string, message: string, stack?: string[] }} = {
         error: {
           name: error.name,
           message: error.message
@@ -68,13 +90,9 @@ class Logger {
       };
       if (error.stack) additionalKeys.error.stack = error.stack.split('\n');
 
-      this._writeLogEvent(
-        'error',
-        actualMessageArgs,
-        additionalKeys
-      );
+      this._writeLogEvent('error', actualMessageArgs, additionalKeys);
     } else {
-      this._writeLogEvent('error', messageArgs);
+      this._writeLogEvent('error', [format, ...args]);
     }
   }
 
@@ -83,8 +101,8 @@ class Logger {
    *
    * @param {string} messageArgs - the message to log
    */
-  fatal(...messageArgs) {
-    this._writeLogEvent('fatal', messageArgs);
+  fatal(format: any, ...args: any[]) {
+    this._writeLogEvent('fatal', [format, ...args]);
   }
 
   /**
@@ -92,8 +110,8 @@ class Logger {
    *
    * @param {string} messageArgs - the message to log
    */
-  info(...messageArgs) {
-    this._writeLogEvent('info', messageArgs);
+  info(format: any, ...args: any[]) {
+    this._writeLogEvent('info', [format, ...args]);
   }
 
   /**
@@ -102,8 +120,8 @@ class Logger {
    * @param {Object} additionalKeys
    * @param {...any} messageArgs
    */
-  infoWithAdditionalKeys(additionalKeys, ...messageArgs) {
-    this._writeLogEvent('info', messageArgs, additionalKeys);
+  infoWithAdditionalKeys(additionalKeys: {}, format: any, ...args: any[]) {
+    this._writeLogEvent('info', [format, ...args], additionalKeys);
   }
 
   /**
@@ -111,8 +129,8 @@ class Logger {
    *
    * @param {string} messageArgs - the message to log
    */
-  trace(...messageArgs) {
-    this._writeLogEvent('trace', messageArgs);
+  trace(format: any, ...args: any[]) {
+    this._writeLogEvent('trace', [format, ...args]);
   }
 
   /**
@@ -120,49 +138,40 @@ class Logger {
    *
    * @param {string} messageArgs - the message to log
    */
-  warn(...messageArgs) {
-    this._writeLogEvent('warn', messageArgs);
+  warn(format: any, ...args: any[]) {
+    this._writeLogEvent('warn', [format, ...args]);
   }
 
-  _writeLogEvent(level, messageArgs, additionalKeys = {}) {
-    const {
-      asyncOperationId,
-      executions,
-      granules,
-      parentArn,
-      pretty,
-      sender,
-      stackName,
-      thisConsole,
-      version
-    } = privates.get(this);
+  _writeLogEvent(level: Level, messageArgs: [any, ...any[]], additionalKeys = {}) {
+    let formattedMessage;
+    if (typeof messageArgs[0] === 'undefined') formattedMessage = '';
+    else formattedMessage = util.format(...messageArgs);
 
     const standardLogEvent = {
-      asyncOperationId,
-      executions,
-      granules,
+      asyncOperationId: this.asyncOperationId,
+      executions: this.executions,
+      granules: this.granules,
       level,
-      message: util.format(...messageArgs),
-      parentArn,
-      sender,
-      stackName,
+      message: formattedMessage,
+      parentArn: this.parentArn,
+      sender: this.sender,
+      stackName: this.stackName,
       timestamp: (new Date()).toISOString(),
-      version
+      version: this.version
     };
 
     const logEvent = {
-
       ...additionalKeys,
       ...standardLogEvent
     };
 
-    const logEventString = pretty
+    const logEventString = this.pretty
       ? JSON.stringify(logEvent, null, 2)
       : JSON.stringify(logEvent);
 
-    if (level === 'error') thisConsole.error(logEventString);
-    else thisConsole.log(logEventString);
+    if (level === 'error') this.thisConsole.error(logEventString);
+    else this.thisConsole.log(logEventString);
   }
 }
 
-export default Logger;
+export = Logger;
