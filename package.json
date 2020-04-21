@@ -12,11 +12,12 @@
     "install-locks": "lerna exec --no-sort -- npm i --package-lock-only --no-audit",
     "lint": "eslint . && lerna run python-lint",
     "lint-md": "markdownlint docs/**/*.md docs/*.md tf-modules/**/*.md tf-modules/*.md",
-    "test": "nyc lerna run --concurrency 1 test",
-    "bootstrap": "lerna bootstrap --no-ci --force-local",
-    "bootstrap-no-build": "lerna bootstrap --no-ci --force-local --ignore-scripts",
-    "bootstrap-no-build-no-concurrency": "lerna bootstrap --no-ci --force-local --ignore-scripts --concurrency 1",
-    "bootstrap-no-build-quiet": "lerna bootstrap --loglevel=error --no-ci --force-local --ignore-scripts",
+    "test": "npm run tsc && nyc lerna run --concurrency 1 test",
+    "tsc": "lerna run tsc",
+    "bootstrap": "lerna bootstrap --no-ci --force-local --ignore-scripts && lerna run tsc && lerna run prepublish && lerna run prepare",
+    "bootstrap-no-build": "lerna bootstrap --no-ci --force-local --ignore-scripts && lerna run tsc",
+    "bootstrap-no-build-no-concurrency": "lerna bootstrap --no-ci --force-local --ignore-scripts --concurrency 1 && lerna run tsc",
+    "bootstrap-no-build-quiet": "lerna bootstrap --no-ci --force-local --ignore-scripts --loglevel=error && lerna run tsc",
     "update": "lerna version --exact --force-publish --no-git-tag-version --no-push",
     "clean": "lerna clean && rm -rf ./node_modules",
     "build": "lerna run --ignore cumulus-integration-tests build",
@@ -56,13 +57,20 @@
   ],
   "author": "Cumulus Authors",
   "license": "Apache-2.0",
+  "dependencies": {
+    "aws-sdk": "^2.585.0",
+    "fs-extra": "^5.0.0",
+    "latest-version": "^4.0.0",
+    "semver": "^5.5.0",
+    "ssh2-streams": "^0.4.8"
+  },
   "devDependencies": {
     "@octokit/graphql": "2.1.1",
+    "@types/node": "^10.16.3",
     "audit-ci": "^2.4.2",
     "ava": "^2.4.0",
     "babel-eslint": "^10.0.3",
     "coveralls": "^3.0.0",
-    "eslint": "^6.8.0",
     "eslint-config-airbnb-base": "^14.0.0",
     "eslint-plugin-eslint-comments": "^3.0.1",
     "eslint-plugin-import": "^2.18.0",
@@ -70,16 +78,11 @@
     "eslint-plugin-lodash": "^2.7.0",
     "eslint-plugin-node": "^7.0.1",
     "eslint-plugin-unicorn": "^4.0.3",
+    "eslint": "^6.8.0",
     "lerna": "3.20.2",
     "markdownlint-cli": "^0.19.0",
     "nyc": "^14.0.0",
-    "simple-git": "^1.96.0"
-  },
-  "dependencies": {
-    "aws-sdk": "^2.585.0",
-    "fs-extra": "^5.0.0",
-    "latest-version": "^4.0.0",
-    "semver": "^5.5.0",
-    "ssh2-streams": "^0.4.8"
+    "simple-git": "^1.96.0",
+    "typescript": "^3.8.3"
   }
 }

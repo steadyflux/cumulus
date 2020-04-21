@@ -1,32 +1,30 @@
-/* eslint no-console: "off" */
-
-import isError from 'lodash.iserror';
-import util from 'util';
+import isError = require('lodash.iserror');
+import util = require('util');
 
 type Level = 'debug' | 'error' | 'fatal' | 'info' | 'trace' | 'warn'
 
 type LoggerConstructorOptions = {
   asyncOperationId?: string,
+  console?: Console,
   executions?: string,
   granules?: string,
   parentArn?: string,
-  pretty: boolean,
-  sender: string,
+  pretty?: boolean,
+  sender?: string,
   stackName?: string,
-  console?: Console,
   version?: string
 }
 
 class Logger {
-  private asyncOperationId: string | undefined;
-  private executions: string | undefined;
-  private granules: string | undefined;
-  private parentArn: string | undefined;
-  private pretty: boolean;
-  private sender: string;
-  private stackName: string | undefined;
-  private thisConsole: Console;
-  private version: string | undefined;
+  readonly #asyncOperationId: string | undefined;
+  readonly #executions: string | undefined;
+  readonly #granules: string | undefined;
+  readonly #parentArn: string | undefined;
+  readonly #pretty: boolean;
+  readonly #sender: string;
+  readonly #stackName: string | undefined;
+  readonly #console: Console;
+  readonly #version: string | undefined;
 
   /**
    * @param {Object} options - options object
@@ -42,45 +40,40 @@ class Logger {
    *   log events to
    * @param {string} [options.version] - Lambda function version
    */
-  constructor(options: LoggerConstructorOptions) {
-    this.asyncOperationId = options.asyncOperationId;
-    this.executions = options.executions;
-    this.granules = options.granules;
-    this.parentArn = options.parentArn;
-    this.pretty = options.pretty || false;
-    this.sender = options.sender || 'unknown';
-    this.stackName = options.stackName;
-    this.thisConsole = options.console || global.console;
-    this.version = options.version;
+  constructor(options: LoggerConstructorOptions = {}) {
+    this.#asyncOperationId = options.asyncOperationId;
+    this.#executions = options.executions;
+    this.#granules = options.granules;
+    this.#parentArn = options.parentArn;
+    this.#pretty = options.pretty || false;
+    this.#sender = options.sender || 'unknown';
+    this.#stackName = options.stackName;
+    this.#console = options.console || global.console;
+    this.#version = options.version;
   }
 
   /**
    * Log a debug message
    *
-   * @param {string} messageArgs - the message to log
+   * @param {...any} [messageArgs] - the message to log
    */
-  debug(format: any, ...args: any[]) {
-    this._writeLogEvent('debug', [format, ...args]);
+  debug(...messageArgs: any[]) {
+    this._writeLogEvent('debug', messageArgs);
   }
 
   /**
    * Log an error message
    *
-   * @param {string} messageArgs - the message to log
+   * @param {...any} [messageArgs] - the message to log
    */
-  error(format: any, ...args: any[]) {
-    const messageArgs = [format, ...args];
+  error(...messageArgs: any[]) {
     const lastMessageArg = messageArgs[messageArgs.length - 1];
 
     if (isError(lastMessageArg)) {
       const error = lastMessageArg;
 
-      let actualMessageArgs: [any, ...any[]];
-      if (args.length === 0) {
-        actualMessageArgs = [error.message];
-      } else {
-        actualMessageArgs = [format, ...args.slice(0, args.length - 1)];
-      }
+      let actualMessageArgs = messageArgs.slice(0, messageArgs.length - 1);
+      if (actualMessageArgs.length === 0) actualMessageArgs = [error.message];
 
       const additionalKeys: { error: { name: string, message: string, stack?: string[] }} = {
         error: {
@@ -90,74 +83,81 @@ class Logger {
       };
       if (error.stack) additionalKeys.error.stack = error.stack.split('\n');
 
-      this._writeLogEvent('error', actualMessageArgs, additionalKeys);
+      this._writeLogEvent(
+        'error',
+        actualMessageArgs,
+        additionalKeys
+      );
     } else {
-      this._writeLogEvent('error', [format, ...args]);
+      this._writeLogEvent('error', messageArgs);
     }
   }
 
   /**
    * Log a fatal message
    *
-   * @param {string} messageArgs - the message to log
+   * @param {...any} [messageArgs] - the message to log
    */
-  fatal(format: any, ...args: any[]) {
-    this._writeLogEvent('fatal', [format, ...args]);
+  fatal(...messageArgs: any[]) {
+    this._writeLogEvent('fatal', messageArgs);
   }
 
   /**
    * Log an info message
    *
-   * @param {string} messageArgs - the message to log
+   * @param {...any} [messageArgs] - the message to log
    */
-  info(format: any, ...args: any[]) {
-    this._writeLogEvent('info', [format, ...args]);
+  info(...messageArgs: string[]) {
+    this._writeLogEvent('info', messageArgs);
   }
 
   /**
    * Log an event with additional properties
    *
    * @param {Object} additionalKeys
-   * @param {...any} messageArgs
+   * @param {...any} [messageArgs] - the message to log
    */
-  infoWithAdditionalKeys(additionalKeys: {}, format: any, ...args: any[]) {
-    this._writeLogEvent('info', [format, ...args], additionalKeys);
+  infoWithAdditionalKeys(additionalKeys: object, ...messageArgs: string[]) {
+    this._writeLogEvent('info', messageArgs, additionalKeys);
   }
 
   /**
    * Log a trace message
    *
-   * @param {string} messageArgs - the message to log
+   * @param {...any} [messageArgs] - the message to log
    */
-  trace(format: any, ...args: any[]) {
-    this._writeLogEvent('trace', [format, ...args]);
+  trace(...messageArgs: string[]) {
+    this._writeLogEvent('trace', messageArgs);
   }
 
   /**
    * Log a warning message
    *
-   * @param {string} messageArgs - the message to log
+   * @param {...any} [messageArgs] - the message to log
    */
-  warn(format: any, ...args: any[]) {
-    this._writeLogEvent('warn', [format, ...args]);
+  warn(...messageArgs: string[]) {
+    this._writeLogEvent('warn', messageArgs);
   }
 
-  _writeLogEvent(level: Level, messageArgs: [any, ...any[]], additionalKeys = {}) {
-    let formattedMessage;
-    if (typeof messageArgs[0] === 'undefined') formattedMessage = '';
-    else formattedMessage = util.format(...messageArgs);
+  private _writeLogEvent(level: Level, messageArgs: any[], additionalKeys = {}) {
+    let message: string;
+    if (messageArgs.length === 0) {
+      message = '';
+    } else {
+      message = util.format(messageArgs[0], ...messageArgs.slice(1));
+    }
 
     const standardLogEvent = {
-      asyncOperationId: this.asyncOperationId,
-      executions: this.executions,
-      granules: this.granules,
+      asyncOperationId: this.#asyncOperationId,
+      executions: this.#executions,
+      granules: this.#granules,
       level,
-      message: formattedMessage,
-      parentArn: this.parentArn,
-      sender: this.sender,
-      stackName: this.stackName,
+      message,
+      parentArn: this.#parentArn,
+      sender: this.#sender,
+      stackName: this.#stackName,
       timestamp: (new Date()).toISOString(),
-      version: this.version
+      version: this.#version
     };
 
     const logEvent = {
@@ -165,12 +165,12 @@ class Logger {
       ...standardLogEvent
     };
 
-    const logEventString = this.pretty
+    const logEventString = this.#pretty
       ? JSON.stringify(logEvent, null, 2)
       : JSON.stringify(logEvent);
 
-    if (level === 'error') this.thisConsole.error(logEventString);
-    else this.thisConsole.log(logEventString);
+    if (level === 'error') this.#console.error(logEventString);
+    else this.#console.log(logEventString);
   }
 }
 
