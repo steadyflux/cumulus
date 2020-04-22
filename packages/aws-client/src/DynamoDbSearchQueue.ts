@@ -1,12 +1,17 @@
-const awsServices = require('./services');
+import { dynamodbDocClient } from './services';
 
 // Class to efficiently search all of the items in a DynamoDB table, without
 // loading them all into memory at once.  Handles paging.
 class DynamoDbSearchQueue {
-  constructor(params, searchType = 'scan') {
+  private readonly dynamodbDocClient: AWS.DynamoDB.DocumentClient;
+  private readonly searchType: 'scan';
+  private readonly params: AWS.DynamoDB.DocumentClient.ScanInput;
+  private items: Array<AWS.DynamoDB.DocumentClient.AttributeMap|null>;
+
+  constructor(params: AWS.DynamoDB.DocumentClient.ScanInput, searchType: 'scan' = 'scan') {
     this.items = [];
     this.params = params;
-    this.dynamodbDocClient = awsServices.dynamodbDocClient();
+    this.dynamodbDocClient = dynamodbDocClient();
     this.searchType = searchType;
   }
 
@@ -46,12 +51,12 @@ class DynamoDbSearchQueue {
     do {
       response = await this.dynamodbDocClient[this.searchType](this.params).promise(); // eslint-disable-line no-await-in-loop, max-len
       if (response.LastEvaluatedKey) this.params.ExclusiveStartKey = response.LastEvaluatedKey;
-    } while (response.Items.length === 0 && response.LastEvaluatedKey);
+    } while ((response.Items || []).length === 0 && response.LastEvaluatedKey);
 
-    this.items = response.Items;
+    this.items = (response.Items || []);
 
     if (!response.LastEvaluatedKey) this.items.push(null);
   }
 }
 
-module.exports = DynamoDbSearchQueue;
+export = DynamoDbSearchQueue;

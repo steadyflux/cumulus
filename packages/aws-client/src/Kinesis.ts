@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Utility functions for interacting with Kinesis
  *
@@ -9,9 +7,8 @@
  * const Kinesis = require('@cumulus/aws-client/Kinesis');
  */
 
-const pRetry = require('p-retry');
-
-const { kinesis } = require('./services');
+import pRetry = require('p-retry');
+import { kinesis } from './services';
 
 /**
  * Describe a Kinesis stream.
@@ -23,7 +20,7 @@ const { kinesis } = require('./services');
  *
  * @alias module:Kinesis
  */
-exports.describeStream = (params, retryOptions = { retries: 0 }) =>
+const describeStream = (params: AWS.Kinesis.DescribeStreamInput, retryOptions: pRetry.Options = { retries: 0 }) =>
   pRetry(
     async () => {
       try {
@@ -35,3 +32,5 @@ exports.describeStream = (params, retryOptions = { retries: 0 }) =>
     },
     { maxTimeout: 10000, ...retryOptions }
   );
+
+export = describeStream;

@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * Utility functions for working with the AWS DynamoDb API
  * @module DynamoDb
@@ -7,10 +5,9 @@
  * @example
  * const DynamoDb = require('@cumulus/aws-client/DynamoDb');
  */
-
-const { RecordDoesNotExist } = require('@cumulus/errors');
-const awsServices = require('./services');
-const { improveStackTrace } = require('./utils');
+import { RecordDoesNotExist } from '@cumulus/errors';
+import { dynamodb } from './services';
+import { improveStackTrace } from './utils';
 
 // Exported functions
 
@@ -31,12 +28,19 @@ const { improveStackTrace } = require('./utils');
  * @kind function
  */
 const get = improveStackTrace(
-  async ({
-    tableName,
-    item,
-    client,
-    getParams = {}
+  async (params: {
+    tableName: string,
+    item: AWS.DynamoDB.DocumentClient.Key,
+    client: AWS.DynamoDB.DocumentClient,
+    getParams?: object
   }) => {
+    const {
+      client,
+      getParams = {},
+      item,
+      tableName
+    } = params;
+
     const getResponse = await client.get({
       ...getParams,
       TableName: tableName,
@@ -61,47 +65,61 @@ const get = improveStackTrace(
  * @kind function
  */
 const scan = improveStackTrace(
-  async ({
-    tableName,
-    client,
-    query,
-    fields,
-    limit,
-    select,
-    startKey
+  async (params: {
+    tableName: string,
+    client: AWS.DynamoDB.DocumentClient,
+    query?: {
+      filter?: string,
+      names?: AWS.DynamoDB.DocumentClient.ExpressionAttributeNameMap,
+      values?: AWS.DynamoDB.DocumentClient.ExpressionAttributeValueMap,
+    },
+    fields?: string,
+    limit?: number,
+    select: string,
+    startKey?: AWS.DynamoDB.DocumentClient.Key
   }) => {
-    const params = {
+    const {
+      client,
+      fields,
+      limit,
+      query,
+      select,
+      startKey,
+      tableName
+    } = params;
+
+    const scanParams: AWS.DynamoDB.DocumentClient.ScanInput = {
       TableName: tableName
     };
 
     if (query) {
       if (query.filter && query.values) {
-        params.FilterExpression = query.filter;
-        params.ExpressionAttributeValues = query.values;
+        scanParams.FilterExpression = query.filter;
+        scanParams.ExpressionAttributeValues = query.values;
       }
 
       if (query.names) {
-        params.ExpressionAttributeNames = query.names;
+        scanParams.ExpressionAttributeNames = query.names;
       }
     }
 
     if (fields) {
-      params.ProjectionExpression = fields;
+      scanParams.ProjectionExpression = fields;
     }
 
     if (limit) {
-      params.Limit = limit;
+      scanParams.Limit = limit;
     }
 
     if (select) {
-      params.Select = select;
+      scanParams.Select = select;
     }
 
     if (startKey) {
-      params.ExclusiveStartKey = startKey;
+      scanParams.ExclusiveStartKey = startKey;
     }
 
-    const response = await client.scan(params).promise();
+    const response = await client.scan(scanParams).promise();
 
     // recursively go through all the records
     if (response.LastEvaluatedKey) {
@@ -114,10 +132,14 @@ const scan = improveStackTrace(
         select,
         startKey: response.LastEvaluatedKey
       });
+
       if (more.Items) {
-        response.Items = response.Items.concat(more.Items);
+        response.Items = (response.Items || []).concat(more.Items);
       }
-      response.Count += more.Count;
+
+      if (typeof response.Count === 'number' && typeof more.Count === 'number') {
+        response.Count += more.Count;
+      }
     }
 
     return response;
@@ -131,9 +153,9 @@ const scan = improveStackTrace(
  *   See https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDB.html#createTable-property
  * @returns {Promise<Object>} - the output of the createTable call
  */
-async function createAndWaitForDynamoDbTable(params) {
-  const createTableResult = await awsServices.dynamodb().createTable(params).promise();
-  await awsServices.dynamodb().waitFor('tableExists', { TableName: params.TableName }).promise();
+async function createAndWaitForDynamoDbTable(params: AWS.DynamoDB.CreateTableInput) {
+  const createTableResult = await dynamodb().createTable(params).promise();
+  await dynamodb().waitFor('tableExists', { TableName: params.TableName }).promise();
 
   return createTableResult;
 }
@@ -145,9 +167,9 @@ async function createAndWaitForDynamoDbTable(params) {
  *   See https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDB.html#deleteTable-property
  * @returns {Promise}
  */
-async function deleteAndWaitForDynamoDbTableNotExists(params) {
-  await awsServices.dynamodb().deleteTable(params).promise();
-  return awsServices.dynamodb().waitFor('tableNotExists', { TableName: params.TableName }).promise();
+async function deleteAndWaitForDynamoDbTableNotExists(params: AWS.DynamoDB.DeleteTableInput) {
+  await dynamodb().deleteTable(params).promise();
+  return dynamodb().waitFor('tableNotExists', { TableName: params.TableName }).promise();
 }
 
 module.exports = {
