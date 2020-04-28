@@ -1,0 +1,76 @@
+# @cumulus/json-logger
+
+A library that outputs JSON-formatted log events
+
+This is a simple class for writing JSON-formatted log events to the console. At the bare
+minimum, all events will contain `level`, `message`, and `timestamp` fields.
+
+Additional log event fields can be set on the `Logger` instance when it is initialized,
+or by calling the `.setDefaultAttribute()` method. These fields will then be part of all log events.
+
+Per-event fields can also be set when writing an individual event.
+
+⚠️ The [documented API](#api) of this package will not change without a
+deprecation warning being provided in earlier releases. Code in this package
+that is _not_ documented in this README may change without warning, and is not
+considered part of the package's public API.
+
+## Installation
+
+```sh
+$ npm install @cumulus/json-logger
+```
+
+## Usage
+
+```js
+const { Logger } = require('json-logger');
+
+const logger = new Logger({
+  defaultFields: {
+    stage: 'production'
+  }
+});
+
+logger.info('Good news');
+// => { "level": "info", "timestamp": 1588092969420, "stage": "production", "message": "Good news" }
+
+
+const prettyLogger = new Logger({ pretty: true });
+
+prettyLogger.error('oops');
+// => {
+//   "level": "error",
+//   "timestamp": 1588092969420,
+//   "message": "oops"
+// };
+
+prettyLogger.exception(new Error('oh no'), 'so bad');
+// => {
+//   "level": "error",
+//   "timestamp": 1588092969420,
+//   "message": "so bad",
+//   "error": {
+//     "message": "oh no",
+//     "name": "Error"
+//   }
+// }
+```
+
+## API
+
+{{>main}}
+
+## About Cumulus
+
+Cumulus is a cloud-based data ingest, archive, distribution and management
+prototype for NASA's future Earth science data streams.
+
+[Cumulus Documentation](https://nasa.github.io/cumulus)
+
+## Contributing
+
+To make a contribution, please [see our contributing guidelines](https://github.com/nasa/cumulus/blob/master/CONTRIBUTING.md).
+
+---
+Generated automatically using `npm run build-docs`

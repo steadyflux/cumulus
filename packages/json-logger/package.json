@@ -1,0 +1,38 @@
+{
+  "name": "@cumulus/json-logger",
+  "version": "1.21.0",
+  "description": "A library that outputs JSON-formatted log events",
+  "keywords": [
+    "GIBS",
+    "CUMULUS",
+    "NASA"
+  ],
+  "engines": {
+    "node": ">=10.16.3"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "./dist/**/*.js",
+    "./dist/**/*.d.ts"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/nasa/cumulus/tree/master/packages/json-logger/README.md",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nasa/cumulus"
+  },
+  "scripts": {
+    "build-docs": "npm run tsc && jsdoc2md --template templates/README.hbs dist/index.js > README.md",
+    "prepare": "npm run tsc",
+    "tsc": "tsc"
+  },
+  "author": "Cumulus Authors",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "jsdoc-to-markdown": "^5.0.3",
+    "typescript": "^3.8.3"
+  }
+}
