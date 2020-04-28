@@ -19,8 +19,8 @@ export class Logger {
   private pretty: boolean;
 
   /**
-   * @param {Object} [params]
-   * @param {Object} [params.defaultFields] - default fields to be set on all log events
+   * @param {Object} [params={}]
+   * @param {Object} [params.defaultFields={}] - default fields to be set on all log events
    * @param {Console} [params.console=global.console] - the console to use for output
    * @param {boolean} [params.pretty=false] - pretty-print JSON
    */
@@ -44,7 +44,7 @@ export class Logger {
    * Write out a log event with level=info
    *
    * @param {string} message
-   * @param {Object} [additionalFields] - fields to log in addition to the defaults
+   * @param {Object} [additionalFields={}] - fields to log in addition to the defaults
    */
   info(message: string, additionalFields: Fields = {}) {
     this.write('info', message, additionalFields);
@@ -54,7 +54,7 @@ export class Logger {
    * Write out a log event with level=error
    *
    * @param {string} message
-   * @param {Object} [additionalFields] - fields to log in addition to the defaults
+   * @param {Object} [additionalFields={}] - fields to log in addition to the defaults
    */
   error(message: string, additionalFields: Fields = {}) {
     this.write('error', message, additionalFields);
@@ -68,7 +68,7 @@ export class Logger {
    *
    * @param {Error} error - an exception to be logged
    * @param {string} [message=error.message] - the message, defaults to the value of `error.message`
-   * @param {Object} [additionalFields] - fields to log in addition to the defaults
+   * @param {Object} [additionalFields={}] - fields to log in addition to the defaults
    */
   exception(error: Error, message?: string, additionalFields: Fields = {}) {
     const errorField: { message: string, name: string, stack?: string[] } = {
