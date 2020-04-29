@@ -3,20 +3,22 @@
 const curry = require('lodash/curry');
 const groupBy = require('lodash/groupBy');
 const isBoolean = require('lodash/isBoolean');
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 const map = require('lodash/map');
 const pick = require('lodash/pick');
 const granules = require('@cumulus/api-client/granules');
 const { runCumulusTask } = require('@cumulus/cumulus-message-adapter-js');
 const { buildProviderClient } = require('@cumulus/ingest/providerClientUtils');
 
-const logger = () => new Logger({
-  executions: process.env.EXECUTIONS,
-  granules: process.env.GRANULES,
-  parentArn: process.env.PARENTARN,
-  sender: process.env.SENDER,
-  stackName: process.env.STACKNAME,
-  version: process.env.TASKVERSION
+const logger = new Logger({
+  defaultFields: {
+    executions: process.env.EXECUTIONS,
+    granules: process.env.GRANULES,
+    parentArn: process.env.PARENTARN,
+    sender: process.env.SENDER,
+    stackName: process.env.STACKNAME,
+    version: process.env.TASKVERSION
+  }
 });
 
 /**
@@ -234,7 +236,7 @@ const filterDuplicates = async (granuleIds, duplicateHandling) => {
  * @returns {Object} returns filesByGranuleId with applicable duplciates removed
  */
 const handleDuplicates = async (filesByGranuleId, duplicateHandling) => {
-  logger().info(`Running discoverGranules with duplicateHandling set to ${duplicateHandling}`);
+  logger.info(`Running discoverGranules with duplicateHandling set to ${duplicateHandling}`);
   if (['skip', 'error'].includes(duplicateHandling)) {
     // Iterate over granules, remove if exists in dynamo
     const filteredKeys = await filterDuplicates(Object.keys(filesByGranuleId), duplicateHandling);
@@ -271,7 +273,7 @@ const discoverGranules = async ({ config }) => {
 
   const discoveredGranules = map(filesByGranuleId, buildGranule(config));
 
-  logger().info(`Discovered ${discoveredGranules.length} granules.`);
+  logger.info(`Discovered ${discoveredGranules.length} granules.`);
   return { granules: discoveredGranules };
 };
 

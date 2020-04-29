@@ -97,7 +97,7 @@ async function processRecordBatch(streamArn, records) {
       );
       return 'ok';
     } catch (err) {
-      log.error(err);
+      log.exception(err);
       return 'err';
     }
   }));
@@ -135,7 +135,7 @@ async function iterateOverShardRecursively(streamArn, recordPromiseList, shardIt
     const nextShardIterator = response.NextShardIterator;
     return iterateOverShardRecursively(streamArn, recordPromiseList, nextShardIterator);
   } catch (error) {
-    log.error(error);
+    log.exception(error);
     return recordPromiseList;
   }
 }
@@ -160,7 +160,7 @@ async function processShard(streamName, streamArn, shardId) {
     const shardTally = tallyList.reduce(tallyReducer, 0);
     return shardTally;
   } catch (err) {
-    log.error(err);
+    log.exception(err);
     return 0;
   }
 }

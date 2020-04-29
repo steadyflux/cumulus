@@ -1,11 +1,13 @@
 'use strict';
 
 const pRetry = require('p-retry');
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 const { lambda } = require('@cumulus/aws-client/services');
 const CumulusApiClientError = require('./CumulusApiClientError');
 
-const logger = new Logger({ sender: '@api-client/cumulusApiClient' });
+const logger = new Logger({
+  defaultFields: { sender: '@api-client/cumulusApiClient' }
+});
 
 /**
  * Invoke the Cumulus private API lambda (using pRetry)

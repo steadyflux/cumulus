@@ -314,7 +314,6 @@ class BaseSearch {
         results: response
       };
     } catch (e) {
-      //log.error(e, logDetails);
       return e;
     }
   }
@@ -338,7 +337,6 @@ class BaseSearch {
         counts: result.body.aggregations
       };
     } catch (e) {
-      //log.error(e, logDetails);
       return e;
     }
   }

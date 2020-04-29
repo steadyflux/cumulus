@@ -2,11 +2,15 @@ import { EOL } from 'os';
 
 type Fields = { [key: string]: any };
 
-type LogLevel = 'error' | 'info';
+type LogLevel = 'debug' | 'error' | 'fatal' | 'info' | 'trace' | 'warn';
+
+interface LoggerConsole {
+  log: (message: string) => void
+}
 
 type LoggerOptions = {
   defaultFields?: Fields,
-  console?: Console,
+  console?: LoggerConsole,
   pretty?: boolean
 };
 
@@ -15,7 +19,7 @@ type LoggerOptions = {
  */
 export class Logger {
   private defaultFields: Fields;
-  private console: Console;
+  private console: LoggerConsole;
   private pretty: boolean;
 
   /**
@@ -41,13 +45,13 @@ export class Logger {
   }
 
   /**
-   * Write out a log event with level=info
+   * Write out a log event with level=debug
    *
    * @param {string} message
    * @param {Object} [additionalFields={}] - fields to log in addition to the defaults
    */
-  info(message: string, additionalFields: Fields = {}) {
-    this.write('info', message, additionalFields);
+  debug(message: string, additionalFields: Fields = {}) {
+    this.write('debug', message, additionalFields);
   }
 
   /**
@@ -58,6 +62,16 @@ export class Logger {
    */
   error(message: string, additionalFields: Fields = {}) {
     this.write('error', message, additionalFields);
+  }
+
+  /**
+   * Write out a log event with level=fatal
+   *
+   * @param {string} message
+   * @param {Object} [additionalFields={}] - fields to log in addition to the defaults
+   */
+  fatal(message: string, additionalFields: Fields = {}) {
+    this.write('fatal', message, additionalFields);
   }
 
   /**
@@ -89,13 +103,43 @@ export class Logger {
     );
   }
 
+  /**
+   * Write out a log event with level=info
+   *
+   * @param {string} message
+   * @param {Object} [additionalFields={}] - fields to log in addition to the defaults
+   */
+  info(message: string, additionalFields: Fields = {}) {
+    this.write('info', message, additionalFields);
+  }
+
+  /**
+   * Write out a log event with level=trace
+   *
+   * @param {string} message
+   * @param {Object} [additionalFields={}] - fields to log in addition to the defaults
+   */
+  trace(message: string, additionalFields: Fields = {}) {
+    this.write('trace', message, additionalFields);
+  }
+
+  /**
+   * Write out a log event with level=warn
+   *
+   * @param {string} message
+   * @param {Object} [additionalFields={}] - fields to log in addition to the defaults
+   */
+  warn(message: string, additionalFields: Fields = {}) {
+    this.write('warn', message, additionalFields);
+  }
+
   private write(level: LogLevel, message: string, additionalFields: Fields = {}) {
     const logEvent = {
       ...this.defaultFields,
       ...additionalFields,
       level,
       message,
-      timestamp: Date.now()
+      timestamp: (new Date()).toISOString()
     };
 
     let messageString;

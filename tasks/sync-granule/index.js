@@ -25,7 +25,7 @@ async function download(ingest, bucket, provider, granules) {
 
   if (!proceed) {
     const err = new errors.ResourcesLockedError('Download lock remained in place after multiple tries');
-    log.error(err);
+    log.exception(err);
     throw err;
   }
 
@@ -40,7 +40,7 @@ async function download(ingest, bucket, provider, granules) {
         sync_granule_duration: endTime - startTime
       };
     } catch (e) {
-      log.error(e);
+      log.exception(e);
       throw e;
     }
   };
@@ -77,7 +77,7 @@ exports.syncGranule = function syncGranule(event) {
 
   if (!provider) {
     const err = new errors.ProviderNotFound('Provider info not provided');
-    log.error(err);
+    log.exception(err);
     return Promise.reject(err);
   }
 
@@ -106,7 +106,7 @@ exports.syncGranule = function syncGranule(event) {
         errorToThrow = new errors.ConnectionTimeout('connection Timed out');
       }
 
-      log.error(errorToThrow);
+      log.exception(errorToThrow);
       throw errorToThrow;
     });
 };

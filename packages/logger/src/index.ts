@@ -36,6 +36,8 @@ class Logger {
     this.stackName = options.stackName;
     this.console = options.console || global.console;
     this.version = options.version;
+
+    this.console.log('The @cumulus/logger package has been deprecated. Use @cumulus/json-logger instead');
   }
 
   /**

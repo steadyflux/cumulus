@@ -28,7 +28,7 @@ const mapTolerant = (arr, fn) => {
   const errors = [];
   const tolerate = (item, reason) => {
     if (reason.stack) {
-      log.error(reason.stack);
+      log.exception(reason);
     }
     errors.push({ item: item, reason: reason });
     return null;

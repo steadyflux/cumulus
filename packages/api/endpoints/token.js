@@ -93,7 +93,7 @@ async function token(event, oAuth2Provider, response) {
         return response.boom.unauthorized('Failed to get authorization token');
       }
 
-      log.error('Error caught when checking code', e);
+      log.exception(e, 'Error caught when checking code');
       return response.boom.unauthorized(e.message);
     }
   }

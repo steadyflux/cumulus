@@ -3,10 +3,12 @@
 const https = require('https');
 const path = require('path');
 const { URL } = require('url');
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 const { getS3Object, s3ObjectExists } = require('@cumulus/aws-client/S3');
 
-const log = new Logger({ sender: '@cumulus/launchpad-auth/LaunchpadToken' });
+const log = new Logger({
+  defaultFields: { sender: '@cumulus/launchpad-auth/LaunchpadToken' }
+});
 
 /**
  * @class

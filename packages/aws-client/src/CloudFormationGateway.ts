@@ -1,8 +1,10 @@
 import pRetry from 'p-retry';
-import Logger from '@cumulus/logger';
+import Logger from '@cumulus/json-logger';
 import { isThrottlingException } from '@cumulus/errors';
 
-const log = new Logger({ sender: 'aws-client/CloudFormationGateway' });
+const log = new Logger({
+  defaultFields: { sender: 'aws-client/CloudFormationGateway' }
+});
 
 class CloudFormationGateway {
   constructor(

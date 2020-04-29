@@ -10,9 +10,11 @@ const isError = require('lodash/isError');
 const exec = util.promisify(require('child_process').exec);
 const fs = require('fs');
 const url = require('url');
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 
-const logger = new Logger({ sender: 'ecs/async-operation' });
+const logger = new Logger({
+  defaultFields: { sender: 'ecs/async-operation' }
+});
 
 /**
  * Return a list of environment variables that should be set but aren't
@@ -200,7 +202,7 @@ async function runTask() {
     // Download the task (to the /home/task/lambda-function directory)
     await fetchLambdaFunction(lambdaInfo.codeUrl);
   } catch (err) {
-    logger.error('Failed to fetch lambda function:', err);
+    logger.exception(err, 'Failed to fetch lambda function');
     await updateAsyncOperation('RUNNER_FAILED', err);
     return;
   }
@@ -209,7 +211,7 @@ async function runTask() {
     // Fetch the event that will be passed to the lambda function from S3
     payload = await fetchAndDeletePayload(process.env.payloadUrl);
   } catch (err) {
-    logger.error('Failed to fetch payload:', err);
+    logger.exception(err, 'Failed to fetch payload');
     if (err.name === 'JSONParsingError') {
       await updateAsyncOperation('TASK_FAILED', err);
     } else {
@@ -227,7 +229,7 @@ async function runTask() {
     // Run the lambda function
     result = await task[lambdaInfo.moduleFunctionName](payload);
   } catch (err) {
-    logger.error('Failed to execute the lambda function:', err);
+    logger.exception(err, 'Failed to execute the lambda function');
     await updateAsyncOperation('TASK_FAILED', err);
     return;
   }

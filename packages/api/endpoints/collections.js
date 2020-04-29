@@ -8,7 +8,7 @@ const {
   InvalidRegexError,
   UnmatchedRegexError
 } = require('@cumulus/errors');
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 const { constructCollectionId } = require('@cumulus/message/Collections');
 
 const { Search } = require('../es/search');
@@ -17,7 +17,9 @@ const models = require('../models');
 const Collection = require('../es/collections');
 const { AssociatedRulesError, isBadRequestError } = require('../lib/errors');
 
-const log = new Logger({ sender: '@cumulus/api/collections' });
+const log = new Logger({
+  defaultFields: { sender: '@cumulus/api/collections' }
+});
 
 /**
  * List all collections.
@@ -118,7 +120,7 @@ async function post(req, res) {
     ) {
       return res.boom.badRequest(e.message);
     }
-    log.error('Error occurred while trying to create collection:', e);
+    log.exception(e, 'Error occurred while trying to create collection');
     return res.boom.badImplementation(e.message);
   }
 }

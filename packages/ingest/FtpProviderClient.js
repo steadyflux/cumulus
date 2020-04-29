@@ -78,7 +78,7 @@ class FtpProviderClient {
     if (!isNil(this.ftpClient)) {
       this.ftpClient.destroy();
     }
-    log.error('FtpProviderClient encountered error: ', normalizedError);
+    log.exception(normalizedError, 'FtpProviderClient encountered error');
     return rejectFn(normalizedError);
   }
 

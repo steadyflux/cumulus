@@ -1,18 +1,21 @@
 'use strict';
 
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 const isNumber = require('lodash/isNumber');
 const isString = require('lodash/isString');
+const util = require('util');
 
 function logger() {
   return new Logger({
-    asyncOperationId: process.env.ASYNCOPERATIONID,
-    executions: process.env.EXECUTIONS,
-    granules: process.env.GRANULES,
-    parentArn: process.env.PARENTARN,
-    sender: process.env.SENDER,
-    stackName: process.env.STACKNAME,
-    version: process.env.TASKVERSION
+    defaultFields: {
+      asyncOperationId: process.env.ASYNCOPERATIONID,
+      executions: process.env.EXECUTIONS,
+      granules: process.env.GRANULES,
+      parentArn: process.env.PARENTARN,
+      sender: process.env.SENDER,
+      stackName: process.env.STACKNAME,
+      version: process.env.TASKVERSION
+    }
   });
 }
 
@@ -24,7 +27,7 @@ function logger() {
  * @returns {undefined} - log is printed to stdout, nothing is returned
  */
 function logAdditionalKeys(additionalKeys, ...args) {
-  logger().infoWithAdditionalKeys(additionalKeys, ...args);
+  logger().info(util.format(...args), additionalKeys);
 }
 
 /**
@@ -33,7 +36,7 @@ function logAdditionalKeys(additionalKeys, ...args) {
  * @param {string} args - Includes message and any other information to log
  */
 function info(...args) {
-  logger().info(...args);
+  logger().info(util.format(...args));
 }
 
 /**
@@ -42,7 +45,11 @@ function info(...args) {
  * @param {Object} args - Includes error and any other information to log
  */
 function error(...args) {
-  logger().error(...args);
+  logger().error(util.format(...args));
+}
+
+function exception(theError, message, additionalFields) {
+  logger().exception(theError, message, additionalFields);
 }
 
 /**
@@ -51,7 +58,7 @@ function error(...args) {
  * @param {Object} args - Includes debugger message and any other information to log
  */
 function debug(...args) {
-  logger().debug(...args);
+  logger().debug(util.format(...args));
 }
 
 /**
@@ -60,7 +67,7 @@ function debug(...args) {
  * @param {Object} args - Includes Warn message and any other information to log
  */
 function warn(...args) {
-  logger().warn(...args);
+  logger().warn(util.format(...args));
 }
 
 /**
@@ -69,7 +76,7 @@ function warn(...args) {
  * @param {Object} args - Includes Fatal message and any other information to log
  */
 function fatal(...args) {
-  logger().fatal(...args);
+  logger().fatal(util.format(...args));
 }
 /**
  * Logs the Trace messsage
@@ -77,7 +84,7 @@ function fatal(...args) {
  * @param {Object} args - Includes Trace message and any other information to log
  */
 function trace(...args) {
-  logger().trace(...args);
+  logger().trace(util.format(...args));
 }
 
 /**
@@ -100,11 +107,14 @@ function convertLogLevel(level) {
   return undefined;
 }
 
-module.exports.info = info;
-module.exports.error = error;
-module.exports.debug = debug;
-module.exports.warn = warn;
-module.exports.fatal = fatal;
-module.exports.trace = trace;
-module.exports.convertLogLevel = convertLogLevel;
-module.exports.logAdditionalKeys = logAdditionalKeys;
+module.exports = {
+  convertLogLevel,
+  debug,
+  error,
+  exception,
+  fatal,
+  info,
+  logAdditionalKeys: util.deprecate(logAdditionalKeys, '@cumulus/common/log.logAdditionalKeys() is deprecated after version 1.21.0 and will be removed in a future release.'),
+  trace,
+  warn
+};

@@ -18,13 +18,15 @@ import {
   InvalidChecksum,
   UnparsableFileLocationError
 } from '@cumulus/errors';
-import Logger = require('@cumulus/logger');
+import Logger from '@cumulus/json-logger';
 
 import { s3 } from './services';
 import { inTestMode } from './test-utils';
 import { improveStackTrace } from './utils';
 
-const log = new Logger({ sender: 'aws-client/s3' });
+const log = new Logger({
+  defaultFields: { sender: 'aws-client/s3' }
+});
 
 const S3_RATE_LIMIT = inTestMode() ? 1 : 20;
 

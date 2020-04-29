@@ -64,9 +64,13 @@ A class to write JSON-formatted log events
 * [Logger](#Logger)
     * [new Logger([params])](#new_Logger_new)
     * [.setDefaultField(name, value)](#Logger+setDefaultField)
-    * [.info(message, [additionalFields])](#Logger+info)
+    * [.debug(message, [additionalFields])](#Logger+debug)
     * [.error(message, [additionalFields])](#Logger+error)
+    * [.fatal(message, [additionalFields])](#Logger+fatal)
     * [.exception(error, [message], [additionalFields])](#Logger+exception)
+    * [.info(message, [additionalFields])](#Logger+info)
+    * [.trace(message, [additionalFields])](#Logger+trace)
+    * [.warn(message, [additionalFields])](#Logger+warn)
 
 <a name="new_Logger_new"></a>
 
@@ -91,10 +95,10 @@ Set a field on all log events
 | name | <code>string</code> | 
 | value | <code>any</code> | 
 
-<a name="Logger+info"></a>
+<a name="Logger+debug"></a>
 
-### logger.info(message, [additionalFields])
-Write out a log event with level=info
+### logger.debug(message, [additionalFields])
+Write out a log event with level=debug
 
 **Kind**: instance method of [<code>Logger</code>](#Logger)  
 
@@ -107,6 +111,18 @@ Write out a log event with level=info
 
 ### logger.error(message, [additionalFields])
 Write out a log event with level=error
+
+**Kind**: instance method of [<code>Logger</code>](#Logger)  
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| message | <code>string</code> |  |  |
+| [additionalFields] | <code>Object</code> | <code>{}</code> | fields to log in addition to the defaults |
+
+<a name="Logger+fatal"></a>
+
+### logger.fatal(message, [additionalFields])
+Write out a log event with level=fatal
 
 **Kind**: instance method of [<code>Logger</code>](#Logger)  
 
@@ -129,6 +145,42 @@ In addition to the usual fields, this log event will contain `error.message`, `e
 | --- | --- | --- | --- |
 | error | <code>Error</code> |  | an exception to be logged |
 | [message] | <code>string</code> | <code>&quot;error.message&quot;</code> | the message, defaults to the value of `error.message` |
+| [additionalFields] | <code>Object</code> | <code>{}</code> | fields to log in addition to the defaults |
+
+<a name="Logger+info"></a>
+
+### logger.info(message, [additionalFields])
+Write out a log event with level=info
+
+**Kind**: instance method of [<code>Logger</code>](#Logger)  
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| message | <code>string</code> |  |  |
+| [additionalFields] | <code>Object</code> | <code>{}</code> | fields to log in addition to the defaults |
+
+<a name="Logger+trace"></a>
+
+### logger.trace(message, [additionalFields])
+Write out a log event with level=trace
+
+**Kind**: instance method of [<code>Logger</code>](#Logger)  
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| message | <code>string</code> |  |  |
+| [additionalFields] | <code>Object</code> | <code>{}</code> | fields to log in addition to the defaults |
+
+<a name="Logger+warn"></a>
+
+### logger.warn(message, [additionalFields])
+Write out a log event with level=warn
+
+**Kind**: instance method of [<code>Logger</code>](#Logger)  
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| message | <code>string</code> |  |  |
 | [additionalFields] | <code>Object</code> | <code>{}</code> | fields to log in addition to the defaults |
 
 

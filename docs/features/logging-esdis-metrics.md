@@ -63,4 +63,6 @@ Any code that produces logs matching the [expected log format](#expected-log-for
 
 ### Node.js
 
-Cumulus core provides a [`@cumulus/logger`](https://github.com/nasa/cumulus/tree/master/packages/logger) library that writes logs in the expected format for ESDIS metrics.
+Cumulus core provides a
+[`@cumulus/json-logger`](https://github.com/nasa/cumulus/tree/master/packages/json-logger/README.md)
+library that writes logs in the expected format for ESDIS metrics.

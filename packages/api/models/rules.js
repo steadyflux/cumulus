@@ -297,7 +297,7 @@ class Rule extends Manager {
     const sourceEventPromises = this.kinesisSourceEvents.map(
       (lambda) => this.addKinesisEventSource(item, lambda).catch(
         (err) => {
-          log.error(`Error adding eventSourceMapping for ${item.name}: ${err}`);
+          log.exception(err, `Error adding eventSourceMapping for ${item.name}`);
           if (err.code !== 'ResourceNotFoundException') throw err;
         }
       )
@@ -356,7 +356,7 @@ class Rule extends Manager {
     const deleteEventPromises = this.kinesisSourceEvents.map(
       (lambda) => this.deleteKinesisEventSource(item, lambda.eventType).catch(
         (err) => {
-          log.error(`Error deleting eventSourceMapping for ${item.name}: ${err}`);
+          log.exception(err, `Error deleting eventSourceMapping for ${item.name}`);
           if (err.code !== 'ResourceNotFoundException') throw err;
         }
       )

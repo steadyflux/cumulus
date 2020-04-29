@@ -3,14 +3,16 @@
 const router = require('express-promise-router')();
 const { inTestMode } = require('@cumulus/common/test-utils');
 const { RecordDoesNotExist } = require('@cumulus/errors');
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 
 const { isBadRequestError } = require('../lib/errors');
 const models = require('../models');
 const { Search } = require('../es/search');
 const { addToLocalES, indexRule } = require('../es/indexer');
 
-const log = new Logger({ sender: '@cumulus/api/rules' });
+const log = new Logger({
+  defaultFields: { sender: '@cumulus/api/rules' }
+});
 
 /**
  * List all rules.
@@ -84,7 +86,7 @@ async function post(req, res) {
     if (isBadRequestError(e)) {
       return res.boom.badRequest(e.message);
     }
-    log.error('Error occurred while trying to create rule:', e);
+    log.exception(e, 'Error occurred while trying to create rule');
     return res.boom.badImplementation(e.message);
   }
 }

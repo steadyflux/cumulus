@@ -1,5 +1,7 @@
 # @cumulus/logger
 
+**This package has been deprected. Use `@cumulus/json-logger` instead.**
+
 > A logging library for use on the Cumulus project.
 
 The `@cumulus/logger` library exports a `Logger` class, which generates

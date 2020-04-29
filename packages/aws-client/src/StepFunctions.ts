@@ -3,12 +3,14 @@
  */
 
 import { JSONPath } from 'jsonpath-plus';
-import Logger = require('@cumulus/logger');
+import Logger from '@cumulus/json-logger';
 import { sfn } from './services';
 import * as s3Utils from './S3';
 import { improveStackTrace, retryOnThrottlingException } from './utils';
 
-const log = new Logger({ sender: '@cumulus/aws-client/StepFunctions' });
+const log = new Logger({
+  defaultFields: { sender: '@cumulus/aws-client/StepFunctions' }
+});
 
 // Utility functions
 

@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **CUMULUS-1971**
+  - Added a `@cumulus/json-logger` package
 - **CUMULUS-1787**
   - Added `collections/active` endpoint for returning collections with active granules in `@cumulus/api`
 - **CUMULUS-1799**
@@ -27,6 +29,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **CUMULUS-1971**
+  - All cumulus core code has been updated to use `@cumulus/json-logger`
 - **CUMULUS-1682**
   - Moved all `@cumulus/ingest/parse-pdr` code into the `parse-pdr` task as it had become tightly coupled with that task's handler and was not used anywhere else. Unit tests also restored.
 - **CUMULUS-1820**
@@ -58,6 +62,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Deprecated
 
+- **CUMULUS-1971**
+  - Deprecated the `@cumulus/logger` package
+  - Deprecated the `@cumulus/common/log.logAdditionalKeys()` function
 - **CUMULUS-1799** - Deprecated the following code. For cases where the code was moved into another package, the new code location is noted:
   - `@cumulus/aws-client/StepFunctions.fromSfnExecutionName()`
   - `@cumulus/aws-client/StepFunctions.toSfnExecutionName()`

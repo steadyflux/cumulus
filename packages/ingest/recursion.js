@@ -70,7 +70,7 @@ async function recursion(fn, configuredPath) {
     const startingPath = isAbsolutePath ? '/' : '.';
     return await recurOnDirectory(fn, startingPath, segments, -1);
   } catch (e) {
-    log.error(`Encountered error during recursive list filtering: ${e}`);
+    log.error(e, 'Encountered error during recursive list filtering');
     log.info('Falling back to unfiltered directory listing...');
     return recurOnDirectory(fn, normalizedPath, [], 0);
   }

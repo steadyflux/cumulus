@@ -22,7 +22,7 @@ async function verifyJwtAuthorization(requestJwtToken) {
   try {
     ({ accessToken, username } = verifyJwtToken(requestJwtToken));
   } catch (err) {
-    log.error('Error caught when checking JWT token', err);
+    log.exception(err, 'Error caught when checking JWT token');
     throw err;
   }
 

@@ -3,9 +3,11 @@ const {
   isConditionalCheckException,
   ResourcesLockedError
 } = require('@cumulus/errors');
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 
-const log = new Logger({ sender: 'api/Semaphore' });
+const log = new Logger({
+  defaultFields: { sender: 'api/Semaphore' }
+});
 
 class Semaphore {
   constructor(docClient, tableName) {
@@ -128,7 +130,7 @@ class Semaphore {
       if (count > 0 && isConditionalCheckException(error)) {
         throw new ResourcesLockedError(`Could not add ${count} to key ${key}`);
       }
-      log.error(error.message, error.stack);
+      log.exception(error);
       throw error;
     }
   }

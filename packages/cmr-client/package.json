@@ -31,7 +31,7 @@
   "author": "Cumulus Authors",
   "license": "Apache-2.0",
   "dependencies": {
-    "@cumulus/logger": "1.21.0",
+    "@cumulus/json-logger": "1.21.0",
     "got": "^9.6.0",
     "lodash": "^4.17.15",
     "public-ip": "^3.0.0",

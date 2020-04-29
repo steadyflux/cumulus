@@ -6,12 +6,14 @@ const pRetry = require('p-retry');
 const url = require('url');
 
 const errors = require('@cumulus/errors');
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 
 const { inTestMode, testAwsClient } = require('./test-utils');
 const { deprecate, setErrorStack } = require('./util');
 
-const log = new Logger({ sender: 'common/aws' });
+const log = new Logger({
+  defaultFields: { sender: 'common/aws' }
+});
 const noop = () => {}; // eslint-disable-line lodash/prefer-noop
 
 let S3_RATE_LIMIT = 20;

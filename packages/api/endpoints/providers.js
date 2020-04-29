@@ -3,14 +3,16 @@
 const router = require('express-promise-router')();
 const { inTestMode } = require('@cumulus/common/test-utils');
 const { RecordDoesNotExist } = require('@cumulus/errors');
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 
 const Provider = require('../models/providers');
 const { AssociatedRulesError, isBadRequestError } = require('../lib/errors');
 const { Search } = require('../es/search');
 const { addToLocalES, indexProvider } = require('../es/indexer');
 
-const log = new Logger({ sender: '@cumulus/api/providers' });
+const log = new Logger({
+  defaultFields: { sender: '@cumulus/api/providers' }
+});
 
 /**
  * List all providers
@@ -84,7 +86,7 @@ async function post(req, res) {
     if (isBadRequestError(err)) {
       return res.boom.badRequest(err.message);
     }
-    log.error('Error occurred while trying to create provider:', err);
+    log.exception(err, 'Error occurred while trying to create provider');
     return res.boom.badImplementation(err.message);
   }
 }

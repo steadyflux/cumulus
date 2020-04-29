@@ -2,17 +2,15 @@
 
 const got = require('got');
 const property = require('lodash/property');
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 
 const validate = require('./validate');
 const getUrl = require('./getUrl');
 const { parseXMLString } = require('./Utils');
 
-const log = new Logger({ sender: 'cmr-client' });
-
-const logDetails = {
-  file: 'cmr-client/ingestConcept.js'
-};
+const log = new Logger({
+  defaultFields: { sender: 'cmr-client' }
+});
 
 /**
  * Posts a record of any kind (collection, granule, etc) to
@@ -29,7 +27,6 @@ async function ingestConcept(type, xmlString, identifierPath, provider, headers)
   let xmlObject = await parseXMLString(xmlString);
 
   const identifier = property(identifierPath)(xmlObject);
-  logDetails.granuleId = identifier;
 
   try {
     await validate(type, xmlString, identifier, provider);
@@ -51,8 +48,9 @@ async function ingestConcept(type, xmlString, identifierPath, provider, headers)
 
     return xmlObject;
   } catch (e) {
-    log.error(e, logDetails);
+    log.exception(e, null, { granuleId: identifier, file: 'cmr-client/ingestConcept.js' });
     throw e;
   }
 }
+
 module.exports = ingestConcept;

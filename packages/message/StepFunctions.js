@@ -10,10 +10,10 @@
 
 const { JSONPath } = require('jsonpath-plus');
 const s3Utils = require('@cumulus/aws-client/S3');
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 
 const log = new Logger({
-  sender: '@cumulus/message/StepFunctions'
+  defaultFields: { sender: '@cumulus/message/StepFunctions' }
 });
 
 /**

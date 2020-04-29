@@ -344,7 +344,7 @@ function logHandler(event, context, cb) {
         .then((s) => cb(null, s))
         .catch(cb);
     } catch (err) {
-      log.error(e);
+      log.exception(e);
       return cb(null);
     }
   });

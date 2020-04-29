@@ -113,7 +113,7 @@ router.use('/ems', ensureAuthorized, ems);
 // Need all 4 params, because that's how express knows this is the error handler
 // eslint-disable-next-line no-unused-vars
 router.use((error, req, res, next) => {
-  log.error(error);
+  log.exception(error);
   return res.boom.badRequest(error.message, error);
 });
 

@@ -1,8 +1,10 @@
-import Logger = require('@cumulus/logger');
+import Logger from '@cumulus/json-logger';
 import { lambda } from './services';
 import { inTestMode } from './test-utils';
 
-const log = new Logger({ sender: 'aws-client/Lambda' });
+const log = new Logger({
+  defaultFields: { sender: 'aws-client/Lambda' }
+});
 
 export const invoke = async (name: string, payload: unknown, type = 'Event') => {
   if (process.env.IS_LOCAL || inTestMode()) {

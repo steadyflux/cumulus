@@ -3,7 +3,7 @@
 const get = require('lodash/get');
 const got = require('got');
 const publicIp = require('public-ip');
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 
 const searchConcept = require('./searchConcept');
 const ingestConcept = require('./ingestConcept');
@@ -11,11 +11,9 @@ const deleteConcept = require('./deleteConcept');
 const getUrl = require('./getUrl');
 const { ummVersion, validateUMMG } = require('./UmmUtils');
 
-const log = new Logger({ sender: 'cmr-client' });
-
-const logDetails = {
-  file: 'cmr-client/CMR.js'
-};
+const log = new Logger({
+  defaultFields: { sender: 'cmr-client' }
+});
 
 const IP_TIMEOUT_MS = 1 * 1000;
 
@@ -181,7 +179,6 @@ class CMR {
     });
 
     const granuleId = ummgMetadata.GranuleUR || 'no GranuleId found on input metadata';
-    logDetails.granuleId = granuleId;
 
     let response;
     try {
@@ -199,7 +196,7 @@ class CMR {
         throw new Error(`Failed to ingest, CMR Errors: ${response.errors}`);
       }
     } catch (error) {
-      log.error(error, logDetails);
+      log.exception(error, null, { granuleId, file: 'cmr-client/CMR.js' });
       throw error;
     }
 

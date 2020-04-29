@@ -441,7 +441,7 @@ class Granule extends Manager {
     try {
       executionDescription = await StepFunctions.describeExecution({ executionArn });
     } catch (err) {
-      log.error(`Could not describe execution ${executionArn}`, err);
+      log.exception(err, `Could not describe execution ${executionArn}`);
     }
 
     const promisedGranuleRecords = granules
@@ -454,10 +454,7 @@ class Granule extends Manager {
             executionDescription
           );
         } catch (err) {
-          log.error(
-            'Error handling granule records: ', err,
-            'Execution message: ', cumulusMessage
-          );
+          log.exception(err, 'Error handling granule records', { executionMessage: cumulusMessage });
           return null;
         }
       });
@@ -494,10 +491,8 @@ class Granule extends Manager {
 
       await this.dynamodbDocClient.update(updateParams).promise();
     } catch (err) {
-      log.error(
-        'Could not store granule record: ', granuleRecord,
-        err
-      );
+      log.exception(err, 'Could not store granule record', { granuleRecord });
+      // FIXME Do we really want this _not_ throwing an exception?
     }
   }
 

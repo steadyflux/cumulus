@@ -1,12 +1,14 @@
 'use strict';
 
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 const got = require('got');
 const { parseXMLString } = require('./Utils');
 
 const getUrl = require('./getUrl');
 
-const log = new Logger({ sender: 'cmr-client' });
+const log = new Logger({
+  defaultFields: { sender: 'cmr-client' }
+});
 
 /**
  * Deletes a record from the CMR

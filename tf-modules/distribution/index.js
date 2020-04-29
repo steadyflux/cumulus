@@ -9,7 +9,7 @@ const distributionRouter = require('express-promise-router')();
 const EarthdataLogin = require('@cumulus/api/lib/EarthdataLogin');
 const express = require('express');
 const hsts = require('hsts');
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 const morgan = require('morgan');
 const urljoin = require('url-join');
 
@@ -19,7 +19,9 @@ const awsServices = require('@cumulus/aws-client/services');
 const { randomId } = require('@cumulus/common/test-utils');
 const { RecordDoesNotExist } = require('@cumulus/errors');
 
-const log = new Logger({ sender: 's3credentials' });
+const log = new Logger({
+  defaultFields: { sender: 's3credentials' }
+});
 
 /**
  * Use NGAP's time-based, temporary credential dispensing lambda.

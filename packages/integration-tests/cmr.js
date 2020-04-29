@@ -163,7 +163,7 @@ async function waitForConceptExistsOutcome(cmrLink, expectation) {
 
     await waitForCmrToBeConsistent();
   } catch (err) {
-    console.error('waitForConceptExistsOutcome() failed:', err);
+    log.exception(err, 'waitForConceptExistsOutcome() failed');
     throw err;
   }
 }

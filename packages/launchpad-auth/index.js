@@ -13,11 +13,13 @@ const {
   s3ObjectExists,
   s3PutObject
 } = require('@cumulus/aws-client/S3');
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 
 const LaunchpadToken = require('./LaunchpadToken');
 
-const log = new Logger({ sender: '@cumulus/launchpad-auth' });
+const log = new Logger({
+  defaultFields: { sender: '@cumulus/launchpad-auth' }
+});
 
 /**
  * Get S3 location of the Launchpad token

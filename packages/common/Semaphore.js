@@ -128,7 +128,7 @@ class Semaphore {
       if (count > 0 && isConditionalCheckException(error)) {
         throw new ResourcesLockedError(`Could not add ${count} to key ${key}`);
       }
-      log.error(error.message, error.stack);
+      log.exception(error);
       throw error;
     }
   }

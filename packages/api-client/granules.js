@@ -1,10 +1,12 @@
 'use strict';
 
 const pRetry = require('p-retry');
-const Logger = require('@cumulus/logger');
+const { Logger } = require('@cumulus/json-logger');
 const { invokeApi } = require('./cumulusApiClient');
 
-const logger = new Logger({ sender: '@api-client/granules' });
+const logger = new Logger({
+  defaultFields: { sender: '@api-client/granules' }
+});
 
 
 /**
