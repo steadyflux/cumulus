@@ -54,7 +54,8 @@ module "delete_granules_workflow" {
           "ResultPath": "$.exception",
           "Next": "WorkflowFailed"
         }
-      ]
+      ],
+      "End": true
     },
     "WorkflowFailed": {
       "Type": "Fail",
