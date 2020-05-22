@@ -113,7 +113,8 @@ test.serial('Request to granules bulk endpoint starts an async-operation with th
     queueName: expectedQueueName,
     workflowName: expectedWorkflowName,
     index: expectedIndex,
-    query: expectedQuery
+    query: expectedQuery,
+    batchSize: 5
   };
 
   await request(app)
