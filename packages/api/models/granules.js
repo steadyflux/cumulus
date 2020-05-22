@@ -179,37 +179,60 @@ class Granule extends Manager {
   /**
    * apply a workflow to a given granule object
    *
-   * @param {Object} g - the granule object
+   * @param {Array<Object>} granules - Array of granule objects
    * @param {string} workflow - the workflow name
    * @param {string} [queueName] - specify queue to append message to
    * @param {string} [asyncOperationId] - specify asyncOperationId origin
    * @returns {Promise<undefined>} undefined
    */
   async applyWorkflow(
-    g,
+    granules,
     workflow,
     queueName = undefined,
     asyncOperationId = undefined
   ) {
-    const { name, version } = deconstructCollectionId(g.collectionId);
+    // Only granules with the same collection/provider can be run
+    // in the same workflow, so group them
+    const groupedGranules = granules.reduce((map, granule) => {
+      const { collectionId, provider } = granule;
+      const key = `${collectionId}${provider}`;
+      // eslint-disable-next-line no-param-reassign
+      map[key] = map[key] || {
+        collectionId,
+        provider,
+        granules: []
+      };
+      map[key].granules.push(granule);
+      return map;
+    }, {});
 
-    const lambdaPayload = await Rule.buildPayload({
-      workflow,
-      payload: {
-        granules: [g]
-      },
-      provider: g.provider,
-      collection: {
-        name,
-        version
-      },
-      queueName,
-      asyncOperationId
-    });
+    await Promise.all(Object.keys(groupedGranules).map(async (groupKey) => {
+      const {
+        collectionId,
+        provider,
+        granules: workflowGranules
+      } = groupedGranules[groupKey];
+      const { name, version } = deconstructCollectionId(collectionId);
 
-    await this.updateStatus({ granuleId: g.granuleId }, 'running');
+      const lambdaPayload = await Rule.buildPayload({
+        workflow,
+        payload: {
+          granules: workflowGranules
+        },
+        provider: provider,
+        collection: {
+          name,
+          version
+        },
+        queueName,
+        asyncOperationId
+      });
 
-    await Lambda.invoke(process.env.invoke, lambdaPayload);
+      // Do we still need this?
+      // await this.updateStatus({ granuleId: g.granuleId }, 'running');
+
+      return Lambda.invoke(process.env.invoke, lambdaPayload);
+    }));
   }
 
   /**
