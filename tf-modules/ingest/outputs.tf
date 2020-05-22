@@ -1,3 +1,9 @@
+output "delete_granules_task" {
+  value = {
+    task_arn = aws_lambda_function.delete_granules_task.arn
+  }
+}
+
 output "discover_granules_task" {
   value = {
     task_arn = aws_lambda_function.discover_granules_task.arn

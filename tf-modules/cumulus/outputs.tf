@@ -40,6 +40,10 @@ output "report_pdrs_sns_topic_arn" {
 
 # Cumulus core task outputs
 
+output "delete_granules_task" {
+  value = module.ingest.delete_granules_task
+}
+
 output "discover_granules_task" {
   value = module.ingest.discover_granules_task
 }
