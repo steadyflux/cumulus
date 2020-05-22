@@ -17,6 +17,16 @@ module "delete_granules_workflow" {
       "Parameters": {
         "cma": {
           "event.$": "$",
+          "task_config": {
+            "cumulus_message": {
+              "outputs": [
+                {
+                  "source": "{$.granules}",
+                  "destination": "{$.deleted_granules}"
+                }
+              ]
+            }
+          },
           "ReplaceConfig": {
             "FullMessage": true
           }
