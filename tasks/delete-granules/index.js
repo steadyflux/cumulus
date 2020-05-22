@@ -1,6 +1,7 @@
 'use strict';
 
-const { deleteGranule } = require('@cumulus/api-client/granules');
+const pMap = require('p-map');
+const granules = require('@cumulus/api-client/granules');
 const cumulusMessageAdapter = require('@cumulus/cumulus-message-adapter-js');
 
 /**
@@ -11,12 +12,14 @@ const cumulusMessageAdapter = require('@cumulus/cumulus-message-adapter-js');
  */
 const deleteGranules = (event) => {
   const input = event.input;
-  return Promise.all(input.granules.map(
-    ({ granuleId }) => deleteGranule({
-      prefix: process.env.STACKNAME,
+  return pMap(
+    input.granules,
+    ({ granuleId }) => granules.deleteGranule({
+      prefix: process.env.stackName,
       granuleId
-    })
-  ));
+    }),
+    { concurrency: 10 }
+  );
 };
 
 /**
@@ -27,7 +30,7 @@ const deleteGranules = (event) => {
  * @returns {Promise<Object>} - Returns output from task.
  *                              See schemas/output.json for detailed output schema
  */
-const handler = (event, context) =>
+const handler = async (event, context) =>
   cumulusMessageAdapter.runCumulusTask(
     deleteGranules,
     event,
@@ -35,5 +38,6 @@ const handler = (event, context) =>
   );
 
 module.exports = {
+  deleteGranules,
   handler
 };
